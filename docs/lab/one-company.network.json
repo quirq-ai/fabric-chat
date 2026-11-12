@@ -1,0 +1,57 @@
+{
+  "name": "fabdune",
+  "domain": "sand.test",
+  "about": "One company on its own: Dune Freight.",
+  "fabric": {
+    "version": "2.5.16",
+    "ca": "1.5.22",
+    "couchdb": "3.4.2"
+  },
+  "consensus": {
+    "type": "etcdraft",
+    "batchTimeout": "1s",
+    "maxMessageCount": 50,
+    "absoluteMaxBytes": "10 MB",
+    "preferredMaxBytes": "2 MB"
+  },
+  "orgs": [
+    {
+      "code": "dune",
+      "name": "Dune Freight",
+      "color": "#c2410c",
+      "people": [
+        {
+          "id": "dana",
+          "name": "Dana Okafor",
+          "title": "Dispatch"
+        },
+        {
+          "id": "dev",
+          "name": "Dev Patel",
+          "title": "Accounts"
+        }
+      ]
+    }
+  ],
+  "workspaces": [
+    {
+      "channel": "dune-home",
+      "name": "Dune home",
+      "about": "Dune Freight only.",
+      "orgs": [
+        "dune"
+      ]
+    }
+  ],
+  "chaincode": {
+    "name": "chat",
+    "version": "1.0",
+    "sequence": 1
+  },
+  "ports": {
+    "app": 4900,
+    "peer": 49051,
+    "couchdb": 47984,
+    "cluster": 7055
+  }
+}

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 372" width="960" height="372" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="t">The repositories, and how a release reaches a company's server</title>
+  <desc id="d">The product repository, fabric-chat, holds the chat's rules, the app, the admin tool and a sandbox. Each release publishes three container images. The second repository, fabric-chat-node, is a template: each company makes its own private copy, names the release it wants, and runs it on its own server.</desc>
+  <style>
+    .card { fill: #ffffff; stroke: #dcdee3; }
+    .row { fill: #f6f6f7; stroke: #e2e4e8; }
+    .h { font-size: 15px; font-weight: 650; fill: #17181c; }
+    .m { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; fill: #17181c; }
+    .mh { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; font-weight: 600; fill: #17181c; }
+    .s { font-size: 11.5px; fill: #5b5f6a; }
+    .tag { font-size: 11px; font-weight: 600; fill: #2b62d9; }
+    .arrow { stroke: #9a9eaa; stroke-width: 2; fill: none; marker-end: url(#tip); }
+    .al { font-size: 11.5px; fill: #5b5f6a; }
+  </style>
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9a9eaa"/>
+    </marker>
+  </defs>
+  <rect width="960" height="372" rx="16" fill="#fbfbfc"/>
+
+  <!-- 1. the product -->
+  <g transform="translate(24,24)">
+    <rect class="card" width="270" height="324" rx="14"/>
+    <text class="tag" x="18" y="28">REPOSITORY 1 · THE PRODUCT</text>
+    <text class="mh" x="18" y="50">fabric-chat</text>
+    <text class="s" x="18" y="68">One place for everything you write</text>
+    <rect class="row" x="18" y="82" width="234" height="46" rx="8"/>
+    <text class="m" x="30" y="101">chaincode/</text>
+    <text class="s" x="30" y="118">the chat's rules, in Go</text>
+    <rect class="row" x="18" y="136" width="234" height="46" rx="8"/>
+    <text class="m" x="30" y="155">app/</text>
+    <text class="s" x="30" y="172">one company's chat: server and pages</text>
+    <rect class="row" x="18" y="190" width="234" height="46" rx="8"/>
+    <text class="m" x="30" y="209">ctl/</text>
+    <text class="s" x="30" y="226">the admin tool: launch, cards, connect</text>
+    <rect class="row" x="18" y="244" width="234" height="46" rx="8"/>
+    <text class="m" x="30" y="263">sandbox/</text>
+    <text class="s" x="30" y="280">three companies on one laptop, for tests</text>
+    <text class="s" x="18" y="310">Tests run on every change.</text>
+  </g>
+
+  <path class="arrow" d="M298 186 H352"/>
+  <text class="al" x="325" y="174" text-anchor="middle">each</text>
+  <text class="al" x="325" y="206" text-anchor="middle">release</text>
+
+  <!-- images -->
+  <g transform="translate(358,74)">
+    <rect class="card" width="216" height="224" rx="14"/>
+    <text class="tag" x="18" y="28">CONTAINER IMAGES</text>
+    <text class="s" x="18" y="46">published with a version number</text>
+    <rect class="row" x="18" y="60" width="180" height="40" rx="8"/>
+    <text class="m" x="30" y="85">fabric-chat-chaincode</text>
+    <rect class="row" x="18" y="108" width="180" height="40" rx="8"/>
+    <text class="m" x="30" y="133">fabric-chat-app</text>
+    <rect class="row" x="18" y="156" width="180" height="40" rx="8"/>
+    <text class="m" x="30" y="181">fabric-chat-ctl</text>
+    <text class="s" x="18" y="212">the same for every company</text>
+  </g>
+
+  <path class="arrow" d="M578 186 H632"/>
+  <text class="al" x="605" y="174" text-anchor="middle">named in</text>
+
+  <!-- 2. the template, and each company's copy -->
+  <g transform="translate(638,24)">
+    <rect class="card" width="298" height="152" rx="14"/>
+    <text class="tag" x="18" y="28">REPOSITORY 2 · THE TEMPLATE</text>
+    <text class="mh" x="18" y="50">fabric-chat-node</text>
+    <text class="s" x="18" y="68">What one company runs. No code of its own.</text>
+    <text class="m" x="18" y="92">compose.yaml</text>
+    <text class="s" x="134" y="92">which images, which version</text>
+    <text class="m" x="18" y="112">company.json</text>
+    <text class="s" x="134" y="112">name, addresses</text>
+    <text class="m" x="18" y="132">chat</text>
+    <text class="s" x="134" y="132">launch, connect, back up</text>
+  </g>
+  <path class="arrow" d="M787 180 V212"/>
+  <text class="al" x="797" y="201">a copy per company</text>
+  <g transform="translate(638,218)">
+    <rect x="0" y="0" width="142" height="130" rx="12" fill="#f1effd" stroke="#cdc7f7"/>
+    <text class="h" x="14" y="26">Aster's copy</text>
+    <text class="s" x="14" y="46">private</text>
+    <text class="s" x="14" y="70">runs on Aster's</text>
+    <text class="s" x="14" y="86">own server</text>
+    <text class="s" x="14" y="112">keys never in it</text>
+    <rect x="156" y="0" width="142" height="130" rx="12" fill="#e8f5f0" stroke="#b9dfd2"/>
+    <text class="h" x="170" y="26">Birch's copy</text>
+    <text class="s" x="170" y="46">private</text>
+    <text class="s" x="170" y="70">runs on Birch's</text>
+    <text class="s" x="170" y="86">own server</text>
+    <text class="s" x="170" y="112">keys never in it</text>
+  </g>
+</svg>

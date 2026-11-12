@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" width="960" height="500" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="t">Each company runs its own chat and its own node</title>
+  <desc id="d">Three companies. Each runs its own chat app and its own node on its own server. Each has a home workspace that only it is on. Two companies share a workspace by both being on one channel; a third workspace is shared by all three. There is no central server.</desc>
+  <style>
+    .card { fill: #ffffff; stroke: #dcdee3; }
+    .node { fill: #f6f6f7; stroke: #e2e4e8; }
+    .h { font-size: 16px; font-weight: 650; fill: #17181c; }
+    .n { font-size: 13px; font-weight: 600; fill: #17181c; }
+    .s { font-size: 11.5px; fill: #5b5f6a; }
+    .m { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; fill: #777b86; }
+    .app { fill: #17181c; }
+    .appt { font-size: 13px; font-weight: 600; fill: #ffffff; }
+    .apps { font-size: 11px; fill: #b9bcc5; }
+    .band { fill: #eef1f6; stroke: #cfd5e0; }
+    .bt { font-size: 13px; fill: #17181c; }
+    .lab { font-size: 11.5px; font-weight: 600; fill: #777b86; letter-spacing: 0.04em; }
+  </style>
+  <rect width="960" height="500" rx="16" fill="#fbfbfc"/>
+
+  <!-- one column per company: its own server -->
+  <g transform="translate(40,24)">
+    <rect class="card" width="260" height="206" rx="14"/>
+    <rect width="260" height="6" rx="3" fill="#6c5ce7"/>
+    <text class="h" x="18" y="34">Aster Labs</text>
+    <text class="m" x="18" y="51">its own server</text>
+    <rect class="app" x="18" y="64" width="224" height="50" rx="9"/>
+    <text class="appt" x="30" y="85">Chat app</text>
+    <text class="apps" x="30" y="102">Alice and Arjun sign in here</text>
+    <rect class="node" x="18" y="124" width="224" height="66" rx="9" stroke="#6c5ce7" stroke-width="1.5"/>
+    <text class="n" x="30" y="145">Node</text>
+    <text class="s" x="30" y="162">certificate authority, peer, orderer</text>
+    <text class="s" x="30" y="178">and the chat's rules</text>
+  </g>
+  <g transform="translate(350,24)">
+    <rect class="card" width="260" height="206" rx="14"/>
+    <rect width="260" height="6" rx="3" fill="#0f9d76"/>
+    <text class="h" x="18" y="34">Birch &amp; Co</text>
+    <text class="m" x="18" y="51">its own server</text>
+    <rect class="app" x="18" y="64" width="224" height="50" rx="9"/>
+    <text class="appt" x="30" y="85">Chat app</text>
+    <text class="apps" x="30" y="102">Bob and Bianca sign in here</text>
+    <rect class="node" x="18" y="124" width="224" height="66" rx="9" stroke="#0f9d76" stroke-width="1.5"/>
+    <text class="n" x="30" y="145">Node</text>
+    <text class="s" x="30" y="162">certificate authority, peer, orderer</text>
+    <text class="s" x="30" y="178">and the chat's rules</text>
+  </g>
+  <g transform="translate(660,24)">
+    <rect class="card" width="260" height="206" rx="14"/>
+    <rect width="260" height="6" rx="3" fill="#d9730d"/>
+    <text class="h" x="18" y="34">Cedar Works</text>
+    <text class="m" x="18" y="51">its own server</text>
+    <rect class="app" x="18" y="64" width="224" height="50" rx="9"/>
+    <text class="appt" x="30" y="85">Chat app</text>
+    <text class="apps" x="30" y="102">Carol and Carlos sign in here</text>
+    <rect class="node" x="18" y="124" width="224" height="66" rx="9" stroke="#d9730d" stroke-width="1.5"/>
+    <text class="n" x="30" y="145">Node</text>
+    <text class="s" x="30" y="162">certificate authority, peer, orderer</text>
+    <text class="s" x="30" y="178">and the chat's rules</text>
+  </g>
+
+  <!-- home workspaces: one company each -->
+  <text class="lab" x="40" y="262">HOME WORKSPACES: ONE COMPANY EACH, NOBODY ELSE HOLDS A COPY</text>
+  <g>
+    <rect x="40" y="272" width="260" height="44" rx="11" fill="#f1effd" stroke="#cdc7f7"/>
+    <circle cx="62" cy="294" r="6" fill="#6c5ce7"/>
+    <text class="bt" x="78" y="298"><tspan font-weight="650">Aster</tspan> home</text>
+    <rect x="350" y="272" width="260" height="44" rx="11" fill="#e8f5f0" stroke="#b9dfd2"/>
+    <circle cx="372" cy="294" r="6" fill="#0f9d76"/>
+    <text class="bt" x="388" y="298"><tspan font-weight="650">Birch</tspan> home</text>
+    <rect x="660" y="272" width="260" height="44" rx="11" fill="#fbf0e4" stroke="#efd2ae"/>
+    <circle cx="682" cy="294" r="6" fill="#d9730d"/>
+    <text class="bt" x="698" y="298"><tspan font-weight="650">Cedar</tspan> home</text>
+  </g>
+
+  <!-- shared workspaces: only the companies that connected -->
+  <text class="lab" x="40" y="350">SHARED WORKSPACES: ONLY THE COMPANIES THAT CONNECTED</text>
+  <rect class="band" x="40" y="360" width="570" height="46" rx="11"/>
+  <circle cx="62" cy="383" r="6" fill="#6c5ce7"/>
+  <circle cx="79" cy="383" r="6" fill="#0f9d76"/>
+  <text class="bt" x="98" y="380"><tspan font-weight="650">Aster + Birch</tspan></text>
+  <text class="m" x="98" y="396">one ledger on both companies' nodes, ordered by their two orderers</text>
+  <rect x="660" y="360" width="260" height="46" rx="11" fill="none" stroke="#cfd5e0" stroke-dasharray="5 5"/>
+  <text class="s" x="676" y="380">Cedar is not on it, and cannot</text>
+  <text class="s" x="676" y="395">tell that it exists</text>
+
+  <rect class="band" x="40" y="418" width="880" height="46" rx="11"/>
+  <circle cx="62" cy="441" r="6" fill="#6c5ce7"/>
+  <circle cx="79" cy="441" r="6" fill="#0f9d76"/>
+  <circle cx="96" cy="441" r="6" fill="#d9730d"/>
+  <text class="bt" x="116" y="438"><tspan font-weight="650">All three</tspan></text>
+  <text class="m" x="116" y="454">one ledger on all three nodes; more than half of them must be running for a message to go through</text>
+
+  <text class="s" x="480" y="486" text-anchor="middle">There is no central server and no network operator. A workspace exists only on the nodes of the companies in it.</text>
+</svg>

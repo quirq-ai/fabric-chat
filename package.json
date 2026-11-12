@@ -1,0 +1,48 @@
+{
+  "name": "fabric-chat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Slack-style messaging app on Hyperledger Fabric 2.5, built to explain how Fabric works.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "net:up": "node network/net.mjs up",
+    "net:down": "node network/net.mjs down",
+    "net:status": "node network/net.mjs status",
+    "net:stop": "node network/net.mjs stop",
+    "net:start": "node network/net.mjs start",
+    "net:chaincode": "node network/net.mjs chaincode",
+    "seed": "tsx server/seed.ts",
+    "dev": "tsx server/index.ts",
+    "build": "vite build",
+    "start": "tsx server/index.ts --production",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run test:chaincode && npm run test:app",
+    "test:chaincode": "node network/net.mjs test",
+    "test:app": "tsx server/check.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/geist-mono": "^5.2.7",
+    "@grpc/grpc-js": "^1.14.0",
+    "@hyperledger/fabric-gateway": "^1.13.0",
+    "@hyperledger/fabric-protos": "^0.3.0",
+    "express": "^5.1.0",
+    "lucide-react": "^1.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/google-protobuf": "^3.15.12",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0"
+  }
+}

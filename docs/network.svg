@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="t">The Fabric Chat network</title>
+  <desc id="d">Three companies, Aster Labs, Birch and Co and Cedar Works, each run a certificate authority, a peer with a state database and the chat chaincode, and an orderer. The commons channel is held by all three peers. The dealroom channel is held by Aster and Birch only; Cedar receives nothing of it.</desc>
+  <style>
+    .card { fill: #ffffff; stroke: #dcdee3; }
+    .node { fill: #f6f6f7; stroke: #e2e4e8; }
+    .chip { fill: #ffffff; stroke: #dcdee3; }
+    .h { font-size: 16px; font-weight: 650; fill: #17181c; }
+    .n { font-size: 13px; font-weight: 600; fill: #17181c; }
+    .c { font-size: 12px; font-weight: 600; fill: #17181c; }
+    .s { font-size: 11.5px; fill: #5b5f6a; }
+    .m { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; fill: #777b86; }
+    .app { fill: #17181c; }
+    .appt { font-size: 12.5px; font-weight: 600; fill: #ffffff; }
+    .apps { font-size: 11px; fill: #b9bcc5; }
+    .band { fill: #eef1f6; stroke: #cfd5e0; }
+    .bt { font-size: 13px; fill: #17181c; }
+    .wire { stroke: #9a9eaa; stroke-width: 1.5; fill: none; }
+  </style>
+  <rect width="960" height="560" rx="16" fill="#fbfbfc"/>
+
+  <!-- one column per company -->
+  <g transform="translate(40,0)" style="--c:#6c5ce7">
+    <rect class="app" x="30" y="20" width="200" height="46" rx="10"/>
+    <text class="appt" x="130" y="40" text-anchor="middle">Alice · Arjun</text>
+    <text class="apps" x="130" y="56" text-anchor="middle">Aster's app server</text>
+    <path class="wire" d="M130 66 V92"/>
+    <rect class="card" x="0" y="92" width="260" height="304" rx="14"/>
+    <rect x="0" y="92" width="260" height="6" rx="3" fill="#6c5ce7"/>
+    <text class="h" x="18" y="126">Aster Labs</text>
+    <text class="m" x="18" y="143">AsterMSP</text>
+    <rect class="node" x="18" y="156" width="224" height="46" rx="9"/>
+    <text class="n" x="30" y="175">Certificate authority</text>
+    <text class="s" x="30" y="192">signs each person's certificate</text>
+    <rect class="node" x="18" y="212" width="224" height="116" rx="9" stroke="#6c5ce7" stroke-width="1.5"/>
+    <text class="n" x="30" y="232">Peer</text>
+    <text class="s" x="30" y="249">keeps the ledgers, checks every block</text>
+    <rect class="chip" x="28" y="262" width="100" height="54" rx="7"/>
+    <text class="c" x="38" y="283">State database</text>
+    <text class="s" x="38" y="300">CouchDB</text>
+    <rect class="chip" x="134" y="262" width="100" height="54" rx="7"/>
+    <text class="c" x="144" y="283">Chaincode</text>
+    <text class="s" x="144" y="300">the chat's rules</text>
+    <rect class="node" x="18" y="338" width="224" height="46" rx="9"/>
+    <text class="n" x="30" y="357">Orderer</text>
+    <text class="s" x="30" y="374">one of the nodes that order blocks</text>
+  </g>
+
+  <g transform="translate(350,0)">
+    <rect class="app" x="30" y="20" width="200" height="46" rx="10"/>
+    <text class="appt" x="130" y="40" text-anchor="middle">Bob · Bianca</text>
+    <text class="apps" x="130" y="56" text-anchor="middle">Birch's app server</text>
+    <path class="wire" d="M130 66 V92"/>
+    <rect class="card" x="0" y="92" width="260" height="304" rx="14"/>
+    <rect x="0" y="92" width="260" height="6" rx="3" fill="#0f9d76"/>
+    <text class="h" x="18" y="126">Birch &amp; Co</text>
+    <text class="m" x="18" y="143">BirchMSP</text>
+    <rect class="node" x="18" y="156" width="224" height="46" rx="9"/>
+    <text class="n" x="30" y="175">Certificate authority</text>
+    <text class="s" x="30" y="192">signs each person's certificate</text>
+    <rect class="node" x="18" y="212" width="224" height="116" rx="9" stroke="#0f9d76" stroke-width="1.5"/>
+    <text class="n" x="30" y="232">Peer</text>
+    <text class="s" x="30" y="249">keeps the ledgers, checks every block</text>
+    <rect class="chip" x="28" y="262" width="100" height="54" rx="7"/>
+    <text class="c" x="38" y="283">State database</text>
+    <text class="s" x="38" y="300">CouchDB</text>
+    <rect class="chip" x="134" y="262" width="100" height="54" rx="7"/>
+    <text class="c" x="144" y="283">Chaincode</text>
+    <text class="s" x="144" y="300">the chat's rules</text>
+    <rect class="node" x="18" y="338" width="224" height="46" rx="9"/>
+    <text class="n" x="30" y="357">Orderer</text>
+    <text class="s" x="30" y="374">one of the nodes that order blocks</text>
+  </g>
+
+  <g transform="translate(660,0)">
+    <rect class="app" x="30" y="20" width="200" height="46" rx="10"/>
+    <text class="appt" x="130" y="40" text-anchor="middle">Carol · Carlos</text>
+    <text class="apps" x="130" y="56" text-anchor="middle">Cedar's app server</text>
+    <path class="wire" d="M130 66 V92"/>
+    <rect class="card" x="0" y="92" width="260" height="304" rx="14"/>
+    <rect x="0" y="92" width="260" height="6" rx="3" fill="#d9730d"/>
+    <text class="h" x="18" y="126">Cedar Works</text>
+    <text class="m" x="18" y="143">CedarMSP</text>
+    <rect class="node" x="18" y="156" width="224" height="46" rx="9"/>
+    <text class="n" x="30" y="175">Certificate authority</text>
+    <text class="s" x="30" y="192">signs each person's certificate</text>
+    <rect class="node" x="18" y="212" width="224" height="116" rx="9" stroke="#d9730d" stroke-width="1.5"/>
+    <text class="n" x="30" y="232">Peer</text>
+    <text class="s" x="30" y="249">keeps the ledgers, checks every block</text>
+    <rect class="chip" x="28" y="262" width="100" height="54" rx="7"/>
+    <text class="c" x="38" y="283">State database</text>
+    <text class="s" x="38" y="300">CouchDB</text>
+    <rect class="chip" x="134" y="262" width="100" height="54" rx="7"/>
+    <text class="c" x="144" y="283">Chaincode</text>
+    <text class="s" x="144" y="300">the chat's rules</text>
+    <rect class="node" x="18" y="338" width="224" height="46" rx="9"/>
+    <text class="n" x="30" y="357">Orderer</text>
+    <text class="s" x="30" y="374">one of the nodes that order blocks</text>
+  </g>
+
+  <!-- the channels: which companies hold each ledger -->
+  <path class="wire" d="M170 396 V424 M480 396 V424 M790 396 V424" stroke-dasharray="3 4"/>
+  <rect class="band" x="40" y="424" width="880" height="50" rx="11"/>
+  <circle cx="64" cy="449" r="6" fill="#6c5ce7"/>
+  <circle cx="81" cy="449" r="6" fill="#0f9d76"/>
+  <circle cx="98" cy="449" r="6" fill="#d9730d"/>
+  <text class="bt" x="118" y="445"><tspan font-weight="650">Commons</tspan> workspace</text>
+  <text class="m" x="118" y="461">channel "commons": one ledger, with a full copy on each of the three peers</text>
+
+  <rect class="band" x="40" y="486" width="570" height="50" rx="11"/>
+  <circle cx="64" cy="511" r="6" fill="#6c5ce7"/>
+  <circle cx="81" cy="511" r="6" fill="#0f9d76"/>
+  <text class="bt" x="118" y="507"><tspan font-weight="650">Deal room</tspan> workspace</text>
+  <text class="m" x="118" y="523">channel "dealroom": a second ledger, on Aster's and Birch's peers only</text>
+  <rect x="660" y="486" width="260" height="50" rx="11" fill="none" stroke="#cfd5e0" stroke-dasharray="5 5"/>
+  <circle cx="684" cy="511" r="6" fill="none" stroke="#d9730d" stroke-width="1.5"/>
+  <text class="s" x="702" y="507">Cedar is not on this channel:</text>
+  <text class="s" x="702" y="522">it gets no blocks and no hashes</text>
+</svg>

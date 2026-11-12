@@ -1,0 +1,8 @@
+# Made by `npm run net:up`: test certificates and private keys, genesis blocks, the compose file. Never commit these.
+.generated/
+node_modules/
+dist/
+*.log
+
+# Single-file copies of the Markdown documents, made for sending to someone. GitHub shows the Markdown itself.
+docs/*.html

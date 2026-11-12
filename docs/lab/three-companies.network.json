@@ -1,0 +1,110 @@
+{
+  "name": "fablab",
+  "domain": "lab.test",
+  "about": "A local Hyperledger Fabric 2.5 network for the Fabric Chat demo. Every organisation, person, certificate and message in it is made up.",
+  "fabric": {
+    "version": "2.5.16",
+    "ca": "1.5.22",
+    "couchdb": "3.4.2"
+  },
+  "consensus": {
+    "type": "etcdraft",
+    "batchTimeout": "1s",
+    "maxMessageCount": 50,
+    "absoluteMaxBytes": "10 MB",
+    "preferredMaxBytes": "2 MB"
+  },
+  "orgs": [
+    {
+      "code": "aster",
+      "name": "Aster Labs",
+      "color": "#6c5ce7",
+      "people": [
+        {
+          "id": "alice",
+          "name": "Alice Ahn",
+          "title": "Product lead"
+        },
+        {
+          "id": "arjun",
+          "name": "Arjun Rao",
+          "title": "Platform engineer"
+        }
+      ]
+    },
+    {
+      "code": "birch",
+      "name": "Birch & Co",
+      "color": "#0f9d76",
+      "people": [
+        {
+          "id": "bob",
+          "name": "Bob Brandt",
+          "title": "Partnerships"
+        },
+        {
+          "id": "bianca",
+          "name": "Bianca Lima",
+          "title": "Finance"
+        }
+      ]
+    },
+    {
+      "code": "cedar",
+      "name": "Cedar Works",
+      "color": "#d9730d",
+      "people": [
+        {
+          "id": "carol",
+          "name": "Carol Chen",
+          "title": "Operations"
+        },
+        {
+          "id": "carlos",
+          "name": "Carlos Vega",
+          "title": "Compliance"
+        }
+      ]
+    }
+  ],
+  "workspaces": [
+    {
+      "channel": "commons",
+      "name": "Commons",
+      "about": "All three companies. Every company's node keeps a full copy of this ledger.",
+      "orgs": [
+        "aster",
+        "birch",
+        "cedar"
+      ]
+    },
+    {
+      "channel": "dealroom",
+      "name": "Deal room",
+      "about": "Aster and Birch only. Cedar's nodes never receive a single block of this ledger.",
+      "orgs": [
+        "aster",
+        "birch"
+      ]
+    },
+    {
+      "channel": "aster-home",
+      "name": "Aster home",
+      "about": "Aster Labs only: a workspace no other company is on.",
+      "orgs": [
+        "aster"
+      ]
+    }
+  ],
+  "chaincode": {
+    "name": "chat",
+    "version": "1.0",
+    "sequence": 1
+  },
+  "ports": {
+    "app": 4800,
+    "peer": 48051,
+    "couchdb": 46984,
+    "cluster": 7055
+  }
+}

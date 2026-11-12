@@ -1,0 +1,4 @@
+# The scripts and chaincode run inside Linux containers, so they keep Unix line endings on every machine.
+* text=auto eol=lf
+*.sh text eol=lf
+*.go text eol=lf
