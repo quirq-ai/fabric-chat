@@ -25,7 +25,7 @@ In Fabric's own words: a company is an organisation, a workspace is a channel, a
 
 ## What was tested for this guide
 
-Each line below was run on 12 or 13 November 2026. The first five were run in a throwaway copy of the project, with the scripts in [lab/](lab/). The next six test step 1 as it is built, the nine after them step 2, and the last eleven step 3. Step 3 was tested on a stand-in for the internet, described under the table, apart from one line that ran on GitHub's own machine.
+Each line below was run on 12 or 13 November 2026. The first five were run in a throwaway copy of the project, with the scripts in [lab/](lab/). The next six test step 1 as it is built, the nine after them step 2, and the last twelve step 3. Step 3 was tested on a stand-in for the internet, described under the table, apart from two lines that ran on GitHub's own machines.
 
 | Claim | What was run | Result |
 | --- | --- | --- |
@@ -51,6 +51,7 @@ Each line below was run on 12 or 13 November 2026. The first five were run in a 
 | Sharing a workspace by clicking | Two administrators in Edge: copy a card, start a workspace, accept the invitation, talk. 29 checks | All passed. The new workspace appeared for both without reloading the page |
 | A release can be published and downloaded | `npm run images -- --push` sent the three images to a registry. Each server held only Docker, the template's two files and a `company.json` | `./chat up` downloaded the images and launched the company in 34 to 39 seconds |
 | The published images are the tested ones | GitHub's own machine, a clean Ubuntu server, built release 0.3.0's images, ran the one-company check on them, and started a company with `./chat up` from the template as it comes. Only then did it publish them | 86 checks passed there and the launch took 25 seconds. The three images are public: anyone downloads them with no account |
+| A new company's first start | A second clean GitHub machine, signed in to nothing that holds the images and with no rights on the repository, took the public template as it comes and ran `./chat up` | From nothing to a running company in 45 seconds, download included |
 | The chat gets its own HTTPS certificate | Each server asked a certificate authority for one. The authority was Pebble, the test server Let's Encrypt publishes, and it checked each name by calling the server on port 80 or 443 | Issued for both companies. Plain HTTP was sent on to HTTPS, and the sign-in cookie was marked for HTTPS only |
 | Only what should be open is open | A machine that belongs to neither company tried the ports of each server | Open: 443, 80, 7051, 7050 and 7055. Closed: the app itself, the certificate authority, the database, and the orderer's admin and status ports |
 | A server says truthfully whether it reaches another | Aster's node tried Dune's from a pasted card: as it was, with Dune's orderer stopped, and from a forged card giving Dune's addresses under another root certificate | All three addresses reached and proven. With the orderer stopped, its two addresses were named as silent. With the forged card: something answers, but it is not that company's node |
@@ -65,7 +66,7 @@ Each line below was run on 12 or 13 November 2026. The first five were run in a 
 
 Not run yet:
 
-- Two real servers on different networks. Everything above ran on one computer, except the one-company check and one `./chat up`, which GitHub's machine runs before it publishes a release. Step 3's servers were separate Dockers with separate addresses, which is as near as one computer gets.
+- Two real servers on different networks. Everything above ran on one computer, except the two lines that ran on GitHub's machines: one company at a time, never two connected. Step 3's servers were separate Dockers with separate addresses, which is as near as one computer gets.
 - Let's Encrypt itself. The certificates came from its test server, by the same protocol. The real one needs a public name.
 - A restore in a workspace of three while the other two carry on writing.
 - Adding a company to a shared workspace that already exists. Removing a person.
