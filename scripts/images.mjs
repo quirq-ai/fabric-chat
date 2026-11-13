@@ -20,12 +20,25 @@ const { version } = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 // The Fabric versions come from the sandbox's settings, so both ways of running use the same ones.
 const { fabric } = JSON.parse(fs.readFileSync(path.join(root, "network.json"), "utf8"));
 const images = process.env.FABRIC_CHAT_IMAGES || "fabric-chat";
+// What a registry shows about each image: where its code is, which release it is, and its licence.
+const source = "https://github.com/quirq-ai/fabric-chat";
+const about = {
+  chaincode: "Fabric Chat: the chat's rules, run as a service next to a company's peer",
+  ctl: "Fabric Chat: the admin tool that sets up one company's node",
+  app: "Fabric Chat: the chat app for one company's own server",
+};
 
 function build(name, context, args = []) {
   const tag = `${images}-${name}:${version}`;
   console.log(`\n\x1b[1mBuilding ${tag}\x1b[0m`);
   const flags = args.flatMap((arg) => ["--build-arg", arg]);
-  const result = spawnSync("docker", ["build", "--quiet", "-t", tag, ...flags, context], { stdio: "inherit", cwd: root });
+  const labels = [
+    `org.opencontainers.image.source=${source}`,
+    `org.opencontainers.image.version=${version}`,
+    "org.opencontainers.image.licenses=MIT",
+    `org.opencontainers.image.description=${about[name]}`,
+  ].flatMap((label) => ["--label", label]);
+  const result = spawnSync("docker", ["build", "--quiet", "-t", tag, ...labels, ...flags, context], { stdio: "inherit", cwd: root });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
   return tag;
