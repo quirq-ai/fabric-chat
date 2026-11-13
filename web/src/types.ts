@@ -36,6 +36,8 @@ export interface NetworkInfo {
   mode: "sandbox" | "company";
   /** True on a company's own server until someone signs in: only the company's name is given. */
   locked: boolean;
+  /** True when this company's server also lets people in with their XO account. */
+  xoLogin?: boolean;
   company?: { id: string; name: string; color: string };
   name: string;
   about: string;

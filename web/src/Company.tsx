@@ -28,12 +28,27 @@ function Gate({ info, children }: { info: NetworkInfo; children: ReactNode }) {
 
 /* ------------------------------------------------------------------ signing in */
 
+const XO_PROBLEMS: Record<string, string> = {
+  XO_LOGIN_STALE: "That sign-in took too long, or was started in another tab. Start it again.",
+  XO_LOGIN_STOPPED: "The sign-in with XO was not finished.",
+  XO_LOGIN_DOWN: "XO's sign-in is not answering just now. Try again in a moment, or use your handle and password.",
+  XO_LOGIN_REFUSED: "XO's sign-in refused. Try again, or use your handle and password.",
+  XO_LOGIN_NO_EMAIL: "That XO account has no confirmed email address.",
+  XO_LOGIN_NOT_ALLOWED: "That XO account is not on this company's list. Ask an administrator.",
+};
+
 export function CompanySignIn({ info, onSignedIn }: { info: NetworkInfo; onSignedIn: (user: SessionUser) => void }) {
   const company = info.company!;
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  // A sign-in with XO that did not work comes back to this page with the reason in the address.
+  const [error, setError] = useState(() => {
+    const code = new URLSearchParams(window.location.search).get("xo-login");
+    if (!code) return "";
+    window.history.replaceState(null, "", "/");
+    return XO_PROBLEMS[code] ?? "Signing in with XO did not work. Try again, or use your handle and password.";
+  });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -71,6 +86,11 @@ export function CompanySignIn({ info, onSignedIn }: { info: NetworkInfo; onSigne
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
+      {info.xoLogin && (
+        <a className="ghost xo-login" href="/api/xo-login/start">
+          Sign in with XO
+        </a>
+      )}
       <p className="dim small">New here, or forgot your password? Ask an administrator at {company.name} for a link.</p>
     </Gate>
   );

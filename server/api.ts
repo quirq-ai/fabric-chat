@@ -11,6 +11,7 @@ import net from "node:net";
 import express, { type Request, type Response, type Router } from "express";
 import { ChatError, mode, network, orgByCode, owned, scopesOf, workspaceOf, type WorkspaceConfig } from "./config";
 import * as chat from "./chat";
+import { xoLoginOn } from "./xologin";
 import { companyRoutes, joinNewWorkspaces, sessionAccount, sessionIdentity, shownTo } from "./company";
 import { translate } from "./fabric";
 import { feedOf } from "./ledger";
@@ -182,7 +183,7 @@ export function api(): Router {
       const net = network();
       const face = net.company ? { id: net.company.id, name: net.company.name, color: net.company.color } : undefined;
       if (mode === "company" && !sessionAccount(req)) {
-        return { mode, locked: true, company: face, name: net.name, about: net.about, fabric: net.fabric, consensus: net.consensus, chaincode: net.chaincode, orgs: [], workspaces: [], people: [] };
+        return { mode, locked: true, xoLogin: xoLoginOn(), company: face, name: net.name, about: net.about, fabric: net.fabric, consensus: net.consensus, chaincode: net.chaincode, orgs: [], workspaces: [], people: [] };
       }
       return {
         mode,

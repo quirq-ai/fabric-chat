@@ -24,6 +24,8 @@ export interface Account {
   password?: { salt: string; hash: string; n: number; r: number; p: number };
   /** A one-time link to choose a password: a first invitation, or a reset. */
   invite?: { hash: string; expires: string };
+  /** Set once the person has signed in with their XO account (see xologin.ts). */
+  xo?: { subject: string; email: string };
   /** The workspaces whose directory this person is in. */
   joined: string[];
   createdAt: string;
@@ -147,6 +149,36 @@ export function setRole(handle: string, role: Role): Account {
   account.role = role;
   saveAccounts();
   return account;
+}
+
+/** The account an XO account signs in to, if it has signed in here before. */
+export function accountOfXo(subject: string): Account | null {
+  return all().find((a) => a.xo?.subject === subject) ?? null;
+}
+
+/** Ties an account to an XO account. From then on signing in with XO opens it, with or without a password. */
+export function linkXo(handle: string, xo: { subject: string; email: string }): Account {
+  const account = accountOf(handle);
+  if (!account) throw new ChatError(404, "NO_SUCH_PERSON", `There is nobody called ${handle}.`);
+  account.xo = xo;
+  account.state = "active";
+  saveAccounts();
+  return account;
+}
+
+/** A handle nobody has yet, made from the name part of an email address. */
+export function freeHandle(email: string): string {
+  const base =
+    email
+      .split("@")[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "")
+      .replace(/^[._-]+/, "")
+      .slice(0, 28) || "member";
+  for (let n = 1; ; n++) {
+    const handle = n === 1 ? base : `${base}-${n}`;
+    if (HANDLE.test(handle) && !RESERVED.has(handle) && !accountOf(handle)) return handle;
+  }
 }
 
 /* ------------------------------------------------------------------ invitations */

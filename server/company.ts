@@ -19,6 +19,7 @@ import { ask } from "./desk";
 import { translate } from "./fabric";
 import { certificateOf, identityOf, type Identity } from "./people";
 import { hasIdentity, sealIdentity } from "./wallet";
+import * as xoLogin from "./xologin";
 
 const COOKIE = "chat_session";
 
@@ -38,10 +39,10 @@ const route =
 
 /* ------------------------------------------------------------------ sessions */
 
-function cookieOf(req: Request): string {
+function cookieOf(req: Request, name = COOKIE): string {
   for (const part of String(req.headers.cookie ?? "").split(";")) {
     const at = part.indexOf("=");
-    if (at > 0 && part.slice(0, at).trim() === COOKIE) return part.slice(at + 1).trim();
+    if (at > 0 && part.slice(0, at).trim() === name) return part.slice(at + 1).trim();
   }
   return "";
 }
@@ -53,7 +54,7 @@ function cookieOf(req: Request): string {
  */
 function setCookie(req: Request, res: Response, value: string, maxAgeSeconds: number): void {
   const secure = company().https || req.secure;
-  res.setHeader("Set-Cookie", `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure ? "; Secure" : ""}`);
+  res.appendHeader("Set-Cookie", `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure ? "; Secure" : ""}`);
 }
 
 const idOf = (handle: string) => `${handle}@${company().id}`;
@@ -214,6 +215,8 @@ export function companyRoutes(router: Router): void {
     }),
   );
 
+  xoLoginRoutes(router);
+
   /* ---- administrators ---- */
 
   router.get(
@@ -255,6 +258,61 @@ export function companyRoutes(router: Router): void {
       return { person: personOf(accounts.setRole(String(req.params.handle), req.body.role)) };
     }),
   );
+}
+
+/* ------------------------------------------------------------------ sign in with XO */
+
+const XO_STATE = "chat_xo_login";
+const XO_PATH = "/api/xo-login";
+/** One at a time: two answers for the same new person must not make two accounts. */
+let xoQueue: Promise<unknown> = Promise.resolve();
+
+/** The account an XO account signs in to. The first time, the company's CA signs them a certificate, as for anyone an administrator adds. */
+function xoAccount(who: xoLogin.XoPerson): Promise<Account> {
+  const work = xoQueue.then(async () => {
+    const before = accounts.accountOfXo(who.subject);
+    if (before) return before;
+    const handle = accounts.freeHandle(who.email);
+    await addPerson({ handle, name: who.name, title: "", role: "member" }, "xo-login");
+    return accounts.linkXo(handle, { subject: who.subject, email: who.email });
+  });
+  xoQueue = work.catch(() => undefined);
+  return work;
+}
+
+function xoLoginRoutes(router: Router): void {
+  if (!xoLogin.xoLoginOn()) return;
+  const stateCookie = (req: Request, value: string, maxAge: number) =>
+    `${XO_STATE}=${value}; Path=${XO_PATH}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${company().https || req.secure ? "; Secure" : ""}`;
+  // These two are opened by the browser itself, not by a page's script: they answer by sending it on.
+  const back = (res: Response, problem?: string) => res.redirect(303, problem ? `/?xo-login=${encodeURIComponent(problem)}` : "/");
+
+  router.get("/xo-login/start", async (req, res) => {
+    try {
+      const { state, url } = await xoLogin.begin(`${originOf(req)}${XO_PATH}/callback`);
+      res.appendHeader("Set-Cookie", stateCookie(req, state, 600));
+      res.redirect(303, url);
+    } catch (err) {
+      back(res, translate(err).code);
+    }
+  });
+
+  router.get("/xo-login/callback", async (req, res) => {
+    const text = (value: unknown) => (typeof value === "string" ? value : "");
+    res.appendHeader("Set-Cookie", stateCookie(req, "", 0));
+    try {
+      const who = await xoLogin.finish(text(req.query.state), cookieOf(req, XO_STATE), text(req.query.error) ? "" : text(req.query.code));
+      const account = await xoAccount(who);
+      const session = accounts.openSession(account.handle);
+      setCookie(req, res, session.token, session.maxAgeSeconds);
+      await ensureJoined(account).catch(() => []);
+      back(res);
+    } catch (err) {
+      const problem = translate(err);
+      console.log(`Sign in with XO: ${problem.code}: ${problem.message}`);
+      back(res, problem.code);
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ other companies */

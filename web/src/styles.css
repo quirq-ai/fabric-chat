@@ -2286,3 +2286,11 @@ button.tiny {
     transition: none !important;
   }
 }
+
+/* "Sign in with XO" under the sign-in form: a link that looks like the form's second button. */
+.gate-card .xo-login {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75rem;
+  text-decoration: none;
+}
