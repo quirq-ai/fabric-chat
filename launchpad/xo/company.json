@@ -1,0 +1,21 @@
+{
+  "name": "XO",
+  "id": "xo.example",
+  "color": "#d9480f",
+  "hosts": {
+    "chat": "liftoff-2-xo-qndg9m4.apps.hello-xo.nl",
+    "peer": "peer.xo.example",
+    "orderer": "orderer.xo.example"
+  },
+  "admin": {
+    "handle": "suraj",
+    "name": "Suraj",
+    "title": ""
+  },
+  "https": "self-signed",
+  "listen": {
+    "address": "0.0.0.0",
+    "port": 443
+  },
+  "release": "0.3.0"
+}

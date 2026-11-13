@@ -1,0 +1,21 @@
+{
+  "name": "Quirq",
+  "id": "quirq.example",
+  "color": "#0f766e",
+  "hosts": {
+    "chat": "liftoff-1-xo-w9633d0.apps.hello-xo.nl",
+    "peer": "peer.quirq.example",
+    "orderer": "orderer.quirq.example"
+  },
+  "admin": {
+    "handle": "suraj",
+    "name": "Suraj",
+    "title": ""
+  },
+  "https": "self-signed",
+  "listen": {
+    "address": "0.0.0.0",
+    "port": 443
+  },
+  "release": "0.3.0"
+}
