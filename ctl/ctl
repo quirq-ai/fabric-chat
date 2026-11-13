@@ -1,0 +1,24 @@
+#!/bin/bash
+# ctl <command>: the admin tool for one company's Fabric Chat node. It runs inside the company's
+# own Docker Compose project, started by ./chat, and does the work that needs Fabric's tools.
+#
+#   ctl env       read company.json on standard input and print the settings Docker Compose needs
+#   ctl compose   read company.json on standard input and print what this server opens to the outside
+#   ctl prepare   make the company's passwords and its root certificate, once
+#   ctl init      have the certificate authority issue each node its certificates; make the home workspace's first block
+#   ctl setup     join the nodes to the home workspace and deploy the chat's rules
+#   ctl status    how many blocks this company's peer holds
+#   ctl agent     stay up, and answer the chat app's requests to share a workspace with another company
+#   ctl proxy     stay up, and answer for the chat over HTTPS
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+
+case "${1:-}" in
+  env | compose | prepare | init | setup | status | agent | proxy)
+    exec bash "$here/$1.sh" "${@:2}"
+    ;;
+  *)
+    sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

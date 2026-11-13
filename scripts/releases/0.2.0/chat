@@ -1,0 +1,204 @@
+#!/bin/sh
+# chat: runs this company's Fabric Chat server. It needs Docker and nothing else.
+#
+#   ./chat up            start everything. The first run also makes the company's keys and its home workspace
+#   ./chat status        what is running, and how many blocks the ledger holds
+#   ./chat admin-link    a new one-time link for an administrator who cannot sign in
+#   ./chat logs [part]   the logs of one part: app, agent, peer, orderer, ca, couchdb or chaincode
+#   ./chat restart       restart the chat app, for example after changing the company's name. People stay signed in
+#   ./chat stop          pause everything. Nothing is lost
+#   ./chat down          remove the containers. The ledger, the keys and the accounts stay
+#   ./chat wipe          remove everything for good: the ledger, every key and every account
+set -eu
+cd "$(dirname "$0")"
+
+# Git Bash on Windows rewrites arguments that look like paths. Docker must get them as written.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL='*'
+
+stop() {
+  echo "$*" >&2
+  exit 1
+}
+
+[ -f company.json ] || stop "company.json is missing. It belongs in this folder, next to compose.yaml."
+command -v docker >/dev/null 2>&1 || stop "Docker is not installed, or not on the PATH."
+docker compose version >/dev/null 2>&1 || stop "This Docker has no \"docker compose\" command. Install Docker Compose version 2."
+docker info >/dev/null 2>&1 || stop "Docker is installed but not running."
+
+# Two settings are needed before anything can check company.json properly: which images to run.
+field() {
+  sed -n "s/^[[:space:]]*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" company.json | head -n 1
+}
+# What this folder was last started as, read from the .env file ./chat up wrote.
+started() {
+  sed -n "s/^$1=//p" .env | tr -d '\r' | head -n 1
+}
+
+need_image() {
+  docker image inspect "$1" >/dev/null 2>&1 && return 0
+  echo "Getting $1"
+  docker pull "$1" >/dev/null 2>&1 || stop "The image $1 is not on this machine and could not be downloaded.
+Check \"images\" and \"release\" in company.json. To build the Fabric Chat images yourself, run \"npm run images\" in the fabric-chat repository."
+}
+
+# Checks company.json and writes .env, the settings Docker Compose reads. None of them is a secret.
+settings() {
+  RELEASE="$(field release)"
+  IMAGES="$(field images)"
+  [ -n "$RELEASE" ] || stop 'company.json: "release" is missing. It is the version to run, on a line of its own, for example "release": "0.2.0".'
+  [ -n "$IMAGES" ] || IMAGES="fabric-chat"
+  need_image "$IMAGES-ctl:$RELEASE"
+  if ! docker run --rm -i "$IMAGES-ctl:$RELEASE" env <company.json >.env.new; then
+    rm -f .env.new
+    exit 1
+  fi
+  # A server belongs to one company for good: its ID and its node names are in every certificate
+  # and every record. A change is refused here, before anything is touched.
+  FIRST_TIME=yes
+  if [ -f .env ]; then
+    FIRST_TIME=no
+    for name in COMPANY_ID:id PEER_HOST:hosts.peer ORDERER_HOST:hosts.orderer; do
+      was="$(started "${name%%:*}")"
+      now="$(sed -n "s/^${name%%:*}=//p" .env.new | tr -d '\r' | head -n 1)"
+      if [ -n "$was" ] && [ "$was" != "$now" ]; then
+        rm -f .env.new
+        stop "company.json: \"${name##*:}\" is now \"$now\". This server was started as \"$was\", and that cannot change.
+Put it back. To start again as a different company, remove this one for good first with ./chat wipe."
+      fi
+    done
+  fi
+  mv .env.new .env
+  # Several companies on one machine reach each other over a Docker network they all join.
+  together="$(started DOCKER_NETWORK)"
+  if [ -n "$together" ] && ! docker network inspect "$together" >/dev/null 2>&1; then
+    docker network create "$together" >/dev/null || stop "The Docker network \"$together\" could not be made."
+  fi
+  for image in $(docker compose config --images | tr -d '\r' | sort -u); do
+    need_image "$image"
+  done
+}
+
+need_settings() {
+  [ -f .env ] || stop "This company has not been started yet. Run: ./chat up"
+}
+
+# Runs a Docker Compose command quietly, and shows what it said only if it failed.
+quiet() {
+  if ! said="$("$@" 2>&1)"; then
+    echo "$said" >&2
+    return 1
+  fi
+}
+
+# one_shot <step>: runs a step that works for a few seconds and stops, and shows its own lines, which
+# say what it did or what is wrong. The finished container is kept: Docker Compose looks for it
+# before it will start the parts that come after, for example on "docker compose start".
+one_shot() {
+  said="$(mktemp)"
+  wrong="$(mktemp)"
+  if docker compose up --no-deps --no-log-prefix --exit-code-from "$1" "$1" >"$said" 2>"$wrong"; then
+    fine=yes
+  else
+    fine=no
+  fi
+  grep -v -e '^Attaching to ' -e ' exited with code [0-9][0-9]*$' "$said" || true
+  # Docker's own complaint, for example an image it could not find, is shown only if the step failed.
+  [ "$fine" = yes ] || grep -v -e '^ Container ' -e '^Aborting on container exit' "$wrong" >&2 || true
+  rm -f "$said" "$wrong"
+  [ "$fine" = yes ]
+}
+
+step() {
+  one_shot "$1" || stop "
+The \"$1\" step did not finish, so the server was not started. What it said is above."
+}
+
+# The parts start in order, and each step is checked before the next begins.
+bring_up() {
+  if ! one_shot prepare; then
+    # This folder had no record of an earlier start, and the server itself turned these settings
+    # down. They must not become that record.
+    [ "$FIRST_TIME" = yes ] && rm -f .env
+    stop "
+The \"prepare\" step did not finish, so the server was not started. What it said is above."
+  fi
+  quiet docker compose up -d --no-deps ca couchdb || stop "The certificate authority or the state database did not start."
+  step init
+  quiet docker compose up -d --no-deps peer orderer chaincode || stop "The peer, the orderer or the chaincode did not start."
+  step setup
+  quiet docker compose up -d --no-deps agent app || stop "The chat app did not start. If the message above names a port, another program is using it: change \"listen.port\" in company.json."
+}
+
+welcome() {
+  echo
+  docker compose exec -T app node build/operator.mjs welcome
+}
+
+case "${1:-}" in
+  up | start)
+    settings
+    bring_up
+    welcome
+    ;;
+
+  restart)
+    settings
+    bring_up
+    quiet docker compose restart agent app || stop "The chat app did not restart."
+    welcome
+    ;;
+
+  status)
+    need_settings
+    docker compose ps
+    echo
+    docker compose run --rm --no-deps -T setup status
+    ;;
+
+  admin-link)
+    need_settings
+    shift
+    docker compose exec -T app node build/operator.mjs admin-link "$@"
+    ;;
+
+  logs)
+    need_settings
+    shift
+    docker compose logs --tail 200 "$@"
+    ;;
+
+  stop)
+    need_settings
+    quiet docker compose stop || stop "Not everything could be paused."
+    echo "Everything is paused. Nothing is lost: ./chat up starts it again."
+    ;;
+
+  down)
+    need_settings
+    quiet docker compose down --remove-orphans || stop "The containers could not be removed."
+    echo "The containers are removed. The ledger, the keys and the accounts are still in their volumes: ./chat up brings it all back."
+    ;;
+
+  wipe)
+    need_settings
+    id="$(started COMPANY_ID)"
+    if [ "${2:-}" != "$id" ]; then
+      echo "This removes $id for good: its ledger, its root key, every person's key and every account."
+      echo "Nobody can get them back, and people's certificates stop working."
+      printf 'Type the company ID to go on: '
+      read -r answer
+      [ "$answer" = "$id" ] || stop "Nothing was removed."
+    fi
+    quiet docker compose down --volumes --remove-orphans || stop "Not everything could be removed."
+    rm -f .env
+    echo "$id is removed from this server."
+    ;;
+
+  *)
+    # The list at the top of this file is the help.
+    sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac
+

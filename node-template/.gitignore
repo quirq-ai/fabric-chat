@@ -1,0 +1,7 @@
+# Written by ./chat up from company.json.
+.env
+.env.new
+compose.generated.yaml
+compose.generated.yaml.new
+# Made by ./chat backup. A backup holds every key the company has: keep it out of any repository.
+backups/

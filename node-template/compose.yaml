@@ -1,0 +1,274 @@
+# Fabric Chat: everything one company runs, on one server.
+#
+# Start it with ./chat up, which checks company.json and writes the .env file read below.
+# The parts start in this order:
+#
+#   prepare  ->  ca  ->  init  ->  couchdb, peer, orderer, chaincode  ->  setup  ->  app  ->  proxy
+#
+# prepare, init and setup each run for a few seconds and stop. The others stay up.
+# ./chat runs them one at a time and checks each before the next. Use it rather than
+# "docker compose up": if a set-up step fails, some versions of Compose wait for ever instead of saying so.
+#
+# This file opens nothing to the world outside this server. What is opened depends on company.json,
+# and ./chat writes it into compose.generated.yaml, next to this file: the chat's own port or the
+# HTTPS proxy, and the node's three ports if other companies are to reach it. Nothing else ever is.
+#
+# Every key and password is made on this server and lives in the volumes at the end of this file.
+# None of them is ever written into this folder, except in a backup you ask for, which is locked.
+
+x-ctl: &ctl
+  image: ${IMAGES:?run ./chat up, which writes .env from company.json}-ctl:${RELEASE}
+  restart: "no"
+
+services:
+  # Makes the company's passwords and its root certificate, the first time only.
+  prepare:
+    <<: *ctl
+    command: prepare
+    volumes:
+      - ./company.json:/company/company.json:ro
+      - ca:/ca
+      - node:/node
+      - app:/app-config
+      - rules:/rules
+      - couchdb-config:/couchdb-config
+
+  # The certificate authority. It signs a certificate for each node and each person.
+  # Nothing outside this server needs to reach it.
+  ca:
+    image: hyperledger/fabric-ca:${CA_VERSION}
+    restart: unless-stopped
+    depends_on:
+      prepare: { condition: service_completed_successfully }
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
+    command: >-
+      fabric-ca-server start
+      --ca.certfile ca-cert.pem --ca.keyfile ca-key.pem --ca.name ca.${COMPANY_ID}
+      --tls.enabled --csr.hosts ca,localhost --port 7054
+    volumes:
+      - ca:/etc/hyperledger/fabric-ca-server
+
+  # Has the certificate authority issue the nodes their certificates; makes the home workspace's first block.
+  init:
+    <<: *ctl
+    command: init
+    depends_on:
+      ca: { condition: service_started }
+    volumes:
+      - ./company.json:/company/company.json:ro
+      - node:/node
+      - app:/app-config
+      - rules:/rules
+
+  # The peer's state database: the current value of every record, for fast reads.
+  couchdb:
+    image: couchdb:${COUCHDB_VERSION}
+    restart: unless-stopped
+    depends_on:
+      prepare: { condition: service_completed_successfully }
+    volumes:
+      - couchdb-config:/opt/couchdb/etc/local.d
+      - couchdb:/opt/couchdb/data
+
+  # The peer holds the company's copy of each workspace and checks every block before storing it.
+  peer:
+    image: hyperledger/fabric-peer:${FABRIC_VERSION}
+    restart: unless-stopped
+    depends_on:
+      init: { condition: service_completed_successfully }
+      couchdb: { condition: service_started }
+    entrypoint: ["sh", "-c"]
+    command: ['export CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD="$$(cat /node/secrets/couchdb)"; exec peer node start']
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_ID=${PEER_HOST}
+      - CORE_PEER_ADDRESS=${PEER_HOST}:7051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=${PEER_HOST}:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=${PEER_HOST}:7051
+      # What this company's people say among themselves is kept on this peer and nowhere else. When
+      # such a message is missing, after a restore from a backup older than it, no other peer can
+      # supply it. Fabric would wait a minute at each one before going on. Three seconds is enough
+      # to learn that nobody has it.
+      - CORE_PEER_GOSSIP_PVTDATA_PULLRETRYTHRESHOLD=3s
+      - CORE_PEER_LOCALMSPID=${COMPANY_ID}
+      - CORE_PEER_MSPCONFIGPATH=/node/peer/msp
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_TLS_CERT_FILE=/node/peer/tls/server.crt
+      - CORE_PEER_TLS_KEY_FILE=/node/peer/tls/server.key
+      - CORE_PEER_TLS_ROOTCERT_FILE=/node/peer/tls/ca.crt
+      - CORE_PEER_PROFILE_ENABLED=false
+      # The chat app talks to this peer through its Gateway service, and to nothing else.
+      - CORE_PEER_GATEWAY_ENABLED=true
+      - CORE_CHAINCODE_EXECUTETIMEOUT=120s
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_HISTORY_ENABLEHISTORYDATABASE=true
+    volumes:
+      - node:/node:ro
+      - peer:/var/hyperledger/production
+    # Other companies' nodes reach the peer on port 7051, by the name above. The port is opened in
+    # compose.generated.yaml, and only when company.json has "node.address".
+    networks:
+      default:
+        aliases: ["${PEER_HOST}"]
+
+  # The orderer puts transactions in order and cuts them into blocks.
+  orderer:
+    image: hyperledger/fabric-orderer:${FABRIC_VERSION}
+    restart: unless-stopped
+    depends_on:
+      init: { condition: service_completed_successfully }
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_LISTENPORT=7050
+      - ORDERER_GENERAL_LOCALMSPID=${COMPANY_ID}
+      - ORDERER_GENERAL_LOCALMSPDIR=/node/orderer/msp
+      - ORDERER_GENERAL_TLS_ENABLED=true
+      - ORDERER_GENERAL_TLS_PRIVATEKEY=/node/orderer/tls/server.key
+      - ORDERER_GENERAL_TLS_CERTIFICATE=/node/orderer/tls/server.crt
+      - ORDERER_GENERAL_TLS_ROOTCAS=[/node/orderer/tls/ca.crt]
+      # Orderers talk to each other on their own port, which insists on a certificate from both
+      # ends. Two companies' orderers start at different times, and without this they never agree.
+      - ORDERER_GENERAL_CLUSTER_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_CLUSTER_LISTENPORT=7055
+      - ORDERER_GENERAL_CLUSTER_SERVERCERTIFICATE=/node/orderer/tls/server.crt
+      - ORDERER_GENERAL_CLUSTER_SERVERPRIVATEKEY=/node/orderer/tls/server.key
+      - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/node/orderer/tls/server.crt
+      - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/node/orderer/tls/server.key
+      - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/node/orderer/tls/ca.crt]
+      # Fabric 2.5 has no system channel: the orderer starts empty and is handed each workspace's
+      # first block through its admin port.
+      - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+      - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+      - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:7053
+      - ORDERER_ADMIN_TLS_ENABLED=true
+      - ORDERER_ADMIN_TLS_CERTIFICATE=/node/orderer/tls/server.crt
+      - ORDERER_ADMIN_TLS_PRIVATEKEY=/node/orderer/tls/server.key
+      - ORDERER_ADMIN_TLS_ROOTCAS=[/node/orderer/tls/ca.crt]
+      - ORDERER_ADMIN_TLS_CLIENTROOTCAS=[/node/orderer/tls/ca.crt]
+      - ORDERER_ADMIN_TLS_CLIENTAUTHREQUIRED=true
+      # Where the orderer reports on itself. The set-up step reads it to know when the orderer is
+      # ready to order. Only this server's own containers can reach it: the port is never published.
+      - ORDERER_OPERATIONS_LISTENADDRESS=0.0.0.0:9443
+      - ORDERER_METRICS_PROVIDER=prometheus
+    command: orderer
+    volumes:
+      - node:/node:ro
+      - orderer:/var/hyperledger/production/orderer
+    # Partner companies' peers reach the orderer on port 7050 and their orderers on 7055. Both are
+    # opened in compose.generated.yaml, and only when company.json has "node.address".
+    networks:
+      default:
+        aliases: ["${ORDERER_HOST}"]
+
+  # The chat's rules: the same program at every company in a workspace.
+  chaincode:
+    image: ${IMAGES}-chaincode:${RELEASE}
+    restart: unless-stopped
+    depends_on:
+      init: { condition: service_completed_successfully }
+    environment:
+      - CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999
+      # The ID the peer was given when the package was installed.
+      - CHAINCODE_ID_FILE=/rules/package.id
+    volumes:
+      - rules:/rules:ro
+
+  # Joins the peer and the orderer to the home workspace and puts the rules in force.
+  setup:
+    <<: *ctl
+    command: setup
+    depends_on:
+      peer: { condition: service_started }
+      orderer: { condition: service_started }
+      chaincode: { condition: service_started }
+    volumes:
+      - ./company.json:/company/company.json:ro
+      - node:/node:ro
+
+  # The node's agent: the one long-running part that holds the node administrator's key. When an
+  # administrator shares a workspace with another company, the chat app asks the agent to do it,
+  # by leaving a request in the "desk" volume. The app itself never holds that key.
+  agent:
+    <<: *ctl
+    command: agent
+    restart: unless-stopped
+    depends_on:
+      setup: { condition: service_completed_successfully }
+    volumes:
+      - ./company.json:/company/company.json:ro
+      - node:/node
+      - app:/app-config
+      - desk:/desk
+
+  # The chat app: the pages people open, and the server that signs for them.
+  app:
+    image: ${IMAGES}-app:${RELEASE}
+    restart: unless-stopped
+    depends_on:
+      setup: { condition: service_completed_successfully }
+    environment:
+      - CHAT_NODE=/app-config
+      - CHAT_DATA=/data
+      - CHAT_DESK=/desk
+      - CHAT_TMP=/run/chat
+      - PORT=8080
+    volumes:
+      - app:/app-config:ro
+      - data:/data
+      - desk:/desk
+    tmpfs:
+      - /run/chat:uid=1000,gid=1000,mode=700
+    # Over plain HTTP its port is opened in compose.generated.yaml. Over HTTPS only the proxy reaches it.
+
+  # Answers for the chat over HTTPS and hands each request to the app. It gets and renews the
+  # certificate for the chat's name by itself. Runs only when company.json asks for HTTPS.
+  proxy:
+    <<: *ctl
+    command: proxy
+    restart: unless-stopped
+    profiles: ["https"]
+    depends_on:
+      app: { condition: service_started }
+    volumes:
+      - ./company.json:/company/company.json:ro
+      - proxy:/proxy
+
+  # ./chat backup and ./chat restore run this for a few seconds, while everything else is stopped.
+  # It is the only part that can read every volume, and it is never left running.
+  backup:
+    image: ${IMAGES}-app:${RELEASE}
+    restart: "no"
+    profiles: ["tools"]
+    user: "0"
+    network_mode: none
+    entrypoint: ["node", "build/backup.mjs"]
+    volumes:
+      - ./backups:/backups
+      - ca:/volumes/ca
+      - node:/volumes/node
+      - app:/volumes/app
+      - rules:/volumes/rules
+      - couchdb-config:/volumes/couchdb-config
+      - couchdb:/volumes/couchdb
+      - peer:/volumes/peer
+      - orderer:/volumes/orderer
+      - data:/volumes/data
+      - proxy:/volumes/proxy
+
+volumes:
+  ca: {}             # the company's root key and the register of everyone it has signed
+  node: {}           # the nodes' own keys and certificates, and the passwords between them
+  app: {}            # what the chat app may read: its two identities and the key that locks people's keys
+  rules: {}          # the ID of the chaincode package
+  couchdb-config: {} # the state database's administrator
+  couchdb: {}        # the state database
+  peer: {}           # the ledger: every block of every workspace this company is on
+  orderer: {}        # the orderer's own copy of the blocks it cut
+  data: {}           # accounts, sessions and each person's private key, encrypted
+  desk: {}           # requests from the chat app to the node's agent, and the answers. Nothing is kept here
+  proxy: {}          # the HTTPS certificate for the chat's name, and its key. Empty over plain HTTP

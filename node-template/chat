@@ -1,0 +1,318 @@
+#!/bin/sh
+# chat: runs this company's Fabric Chat server. It needs Docker and nothing else.
+#
+#   ./chat up              start everything. The first run also makes the company's keys and its home workspace
+#   ./chat status          what is running, what is open to the outside, and how many blocks the ledger holds
+#   ./chat admin-link      a new one-time link for an administrator who cannot sign in
+#   ./chat logs [part]     the logs of one part: app, agent, proxy, peer, orderer, ca, couchdb or chaincode
+#   ./chat restart         restart the chat app, for example after changing the company's name. People stay signed in
+#   ./chat backup          copy everything this company has into one locked file in backups/. The chat pauses for a minute
+#   ./chat restore <file>  bring a backup back on an empty server
+#   ./chat stop            pause everything. Nothing is lost
+#   ./chat down            remove the containers. The ledger, the keys and the accounts stay
+#   ./chat wipe            remove everything for good: the ledger, every key and every account
+set -eu
+cd "$(dirname "$0")"
+
+# Git Bash on Windows rewrites arguments that look like paths. Docker must get them as written.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL='*'
+
+# This script and compose.yaml belong to a release, like the images. The images say which they need.
+TEMPLATE=3
+
+stop() {
+  echo "$*" >&2
+  exit 1
+}
+
+[ -f company.json ] || stop "company.json is missing. It belongs in this folder, next to compose.yaml."
+command -v docker >/dev/null 2>&1 || stop "Docker is not installed, or not on the PATH."
+docker compose version >/dev/null 2>&1 || stop "This Docker has no \"docker compose\" command. Install Docker Compose version 2."
+docker info >/dev/null 2>&1 || stop "Docker is installed but not running."
+
+# Two settings are needed before anything can check company.json properly: which images to run.
+field() {
+  sed -n "s/^[[:space:]]*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" company.json | head -n 1
+}
+# What this folder was last started as, read from the .env file ./chat up wrote.
+started() {
+  sed -n "s/^$1=//p" .env | tr -d '\r' | head -n 1
+}
+
+need_image() {
+  docker image inspect "$1" >/dev/null 2>&1 && return 0
+  echo "Getting $1"
+  docker pull "$1" >/dev/null 2>&1 || stop "The image $1 is not on this machine and could not be downloaded.
+Check \"images\" and \"release\" in company.json. To build the Fabric Chat images yourself, run \"npm run images\" in the fabric-chat repository."
+}
+
+# Checks company.json and writes the two files Docker Compose reads: .env, the settings, and
+# compose.generated.yaml, what this server opens to the outside. Neither holds a secret.
+settings() {
+  RELEASE="$(field release)"
+  IMAGES="$(field images)"
+  [ -n "$RELEASE" ] || stop 'company.json: "release" is missing. It is the version to run, on a line of its own, for example "release": "0.3.0".'
+  [ -n "$IMAGES" ] || IMAGES="fabric-chat"
+  need_image "$IMAGES-ctl:$RELEASE"
+  if ! docker run --rm -i -e "CHAT_TEMPLATE=$TEMPLATE" "$IMAGES-ctl:$RELEASE" env <company.json >.env.new; then
+    rm -f .env.new
+    exit 1
+  fi
+  if ! grep -q "^TEMPLATE=$TEMPLATE\$" .env.new; then
+    rm -f .env.new
+    stop "company.json: \"release\" is \"$RELEASE\", which is older than the files in this folder.
+Set \"release\" to the version these files came with, or put back the \"chat\" and \"compose.yaml\" of release $RELEASE."
+  fi
+  # A server belongs to one company for good: its ID and its node names are in every certificate
+  # and every record. A change is refused here, before anything is touched.
+  FIRST_TIME=yes
+  if [ -f .env ]; then
+    FIRST_TIME=no
+    for name in COMPANY_ID:id PEER_HOST:hosts.peer ORDERER_HOST:hosts.orderer; do
+      was="$(started "${name%%:*}")"
+      now="$(sed -n "s/^${name%%:*}=//p" .env.new | tr -d '\r' | head -n 1)"
+      if [ -n "$was" ] && [ "$was" != "$now" ]; then
+        rm -f .env.new
+        stop "company.json: \"${name##*:}\" is now \"$now\". This server was started as \"$was\", and that cannot change.
+Put it back. To start again as a different company, remove this one for good first with ./chat wipe."
+      fi
+    done
+  fi
+  if ! docker run --rm -i "$IMAGES-ctl:$RELEASE" compose <company.json >compose.generated.yaml.new; then
+    rm -f .env.new compose.generated.yaml.new
+    exit 1
+  fi
+  mv .env.new .env
+  mv compose.generated.yaml.new compose.generated.yaml
+  # Several companies on one machine reach each other over a Docker network they all join.
+  together="$(started DOCKER_NETWORK)"
+  if [ -n "$together" ] && ! docker network inspect "$together" >/dev/null 2>&1; then
+    docker network create "$together" >/dev/null || stop "The Docker network \"$together\" could not be made."
+  fi
+  for image in $(docker compose config --images | tr -d '\r' | sort -u); do
+    need_image "$image"
+  done
+}
+
+need_settings() {
+  [ -f .env ] || stop "This company has not been started yet. Run: ./chat up"
+  [ "$(started TEMPLATE)" = "$TEMPLATE" ] && [ -f compose.generated.yaml ] || stop "The files in this folder were changed since this company was last started. Run: ./chat up"
+}
+
+# Runs a Docker Compose command quietly, and shows what it said only if it failed.
+quiet() {
+  if ! said="$("$@" 2>&1)"; then
+    echo "$said" >&2
+    return 1
+  fi
+}
+
+# one_shot <step>: runs a step that works for a few seconds and stops, and shows its own lines, which
+# say what it did or what is wrong. The finished container is kept: Docker Compose looks for it
+# before it will start the parts that come after, for example on "docker compose start".
+one_shot() {
+  said="$(mktemp)"
+  wrong="$(mktemp)"
+  if docker compose up --no-deps --no-log-prefix --exit-code-from "$1" "$1" >"$said" 2>"$wrong"; then
+    fine=yes
+  else
+    fine=no
+  fi
+  grep -v -e '^Attaching to ' -e ' exited with code [0-9][0-9]*$' "$said" || true
+  # Docker's own complaint, for example an image it could not find, is shown only if the step failed.
+  [ "$fine" = yes ] || grep -v -e '^ Container ' -e '^Aborting on container exit' "$wrong" >&2 || true
+  rm -f "$said" "$wrong"
+  [ "$fine" = yes ]
+}
+
+step() {
+  one_shot "$1" || stop "
+The \"$1\" step did not finish, so the server was not started. What it said is above."
+}
+
+# The parts start in order, and each step is checked before the next begins.
+bring_up() {
+  if ! one_shot prepare; then
+    # This folder had no record of an earlier start, and the server itself turned these settings
+    # down. They must not become that record.
+    [ "$FIRST_TIME" = yes ] && rm -f .env compose.generated.yaml
+    stop "
+The \"prepare\" step did not finish, so the server was not started. What it said is above."
+  fi
+  quiet docker compose up -d --no-deps ca couchdb || stop "The certificate authority or the state database did not start."
+  step init
+  quiet docker compose up -d --no-deps peer orderer chaincode || stop "The peer, the orderer or the chaincode did not start. If the message above names a port, another program on this server is using 7051, 7050 or 7055, which \"node.address\" in company.json opens."
+  step setup
+  quiet docker compose up -d --no-deps agent app || stop "The chat app did not start. If the message above names a port, another program is using it: change \"listen.port\" in company.json."
+  if [ "$(started CHAT_HTTPS)" = off ]; then
+    # HTTPS was switched off since the last start: its proxy must not stay up.
+    docker compose --profile https rm -sf proxy >/dev/null 2>&1 || true
+  else
+    quiet docker compose up -d --no-deps proxy || stop "The HTTPS proxy did not start. If the message above names a port, another program on this server is using port $(started CHAT_PORT) or port 80."
+  fi
+}
+
+welcome() {
+  echo
+  docker compose exec -T app node build/operator.mjs welcome
+}
+
+# ask_secret <question>: reads one line into SECRET without showing it.
+ask_secret() {
+  if [ -t 0 ]; then
+    printf '%s' "$1" >&2
+    stty -echo 2>/dev/null || true
+    IFS= read -r SECRET || SECRET=""
+    stty echo 2>/dev/null || true
+    printf '\n' >&2
+  else
+    IFS= read -r SECRET || SECRET=""
+  fi
+}
+
+# A backup holds every key the company has, so it is locked with a passphrase. A scheduled backup
+# gives it in CHAT_BACKUP_PASSPHRASE. Otherwise it is asked for.
+passphrase() {
+  if [ -n "${CHAT_BACKUP_PASSPHRASE:-}" ]; then
+    SECRET="$CHAT_BACKUP_PASSPHRASE"
+    return 0
+  fi
+  ask_secret "$1"
+  if [ "${2:-}" = twice ]; then
+    first="$SECRET"
+    ask_secret "Once more: "
+    [ "$first" = "$SECRET" ] || stop "The two did not match. Nothing was done."
+  fi
+}
+
+case "${1:-}" in
+  up | start)
+    settings
+    bring_up
+    welcome
+    ;;
+
+  restart)
+    settings
+    bring_up
+    quiet docker compose restart agent app || stop "The chat app did not restart."
+    welcome
+    ;;
+
+  status)
+    need_settings
+    docker compose ps
+    echo
+    echo "The chat: $(started CHAT_ORIGIN)"
+    if [ -n "$(started NODE_BIND)" ]; then
+      echo "The node: open to other companies' servers on $(started NODE_BIND), ports 7051, 7050 and 7055"
+    elif [ -n "$(started DOCKER_NETWORK)" ]; then
+      echo "The node: reached by other companies on this machine over the Docker network \"$(started DOCKER_NETWORK)\". Closed to every other server"
+    else
+      echo "The node: closed. No other server can reach it, so this company cannot share a workspace yet"
+    fi
+    echo
+    docker compose run --rm --no-deps -T setup status
+    ;;
+
+  admin-link)
+    need_settings
+    shift
+    docker compose exec -T app node build/operator.mjs admin-link "$@"
+    ;;
+
+  logs)
+    need_settings
+    shift
+    docker compose logs --tail 200 "$@"
+    ;;
+
+  backup)
+    need_settings
+    settings
+    passphrase "A backup holds every key this company has. Choose a passphrase to lock it with: " twice
+    [ "${#SECRET}" -ge 12 ] || stop "Use a passphrase of at least 12 characters: four unrelated words will do. Nothing was done."
+    mkdir -p backups
+    echo "Pausing everything for a copy that agrees with itself."
+    quiet docker compose stop || stop "Not everything could be paused. Nothing was copied."
+    if printf '%s\n' "$SECRET" | docker compose run --rm --no-deps -T backup make; then
+      made=yes
+    else
+      made=no
+    fi
+    SECRET=""
+    bring_up
+    [ "$made" = yes ] || stop "
+The backup was not made. What went wrong is above. Everything is running again."
+    echo "Everything is running again."
+    echo "Copy the file off this server, and keep the passphrase somewhere else: without it the file cannot be opened."
+    ;;
+
+  restore)
+    file="${2:-}"
+    [ -n "$file" ] || stop "Say which backup: ./chat restore backups/<file>"
+    case "$file" in
+      backups/*) ;;
+      *) stop "Put the backup in the \"backups\" folder next to this script, and name it as backups/<file>." ;;
+    esac
+    [ -f "$file" ] || stop "There is no file $file."
+    [ ! -f .env ] || stop "This folder has already started a company. A backup is restored on an empty server.
+To replace what is here, remove it for good first with ./chat wipe, then restore."
+    settings
+    project="$(started COMPOSE_PROJECT_NAME)"
+    if [ -n "$(docker volume ls -q --filter "label=com.docker.compose.project=$project")" ]; then
+      rm -f .env compose.generated.yaml
+      stop "This server already holds $(started COMPANY_ID). A backup is restored on an empty server.
+To replace what is here, remove it for good first with ./chat wipe, then restore."
+    fi
+    passphrase "The passphrase this backup was locked with: "
+    if ! printf '%s\n' "$SECRET" | docker compose run --rm --no-deps -T backup open "${file#backups/}" "$(started COMPANY_ID)"; then
+      SECRET=""
+      docker compose --profile tools --profile https down --volumes --remove-orphans >/dev/null 2>&1 || true
+      rm -f .env compose.generated.yaml
+      stop "
+Nothing was restored."
+    fi
+    SECRET=""
+    bring_up
+    welcome
+    ;;
+
+  stop)
+    need_settings
+    quiet docker compose stop || stop "Not everything could be paused."
+    echo "Everything is paused. Nothing is lost: ./chat up starts it again."
+    ;;
+
+  down)
+    need_settings
+    quiet docker compose --profile https down --remove-orphans || stop "The containers could not be removed."
+    echo "The containers are removed. The ledger, the keys and the accounts are still in their volumes: ./chat up brings it all back."
+    ;;
+
+  wipe)
+    [ -f .env ] || stop "This company has not been started yet, so there is nothing to remove."
+    id="$(started COMPANY_ID)"
+    if [ "${2:-}" != "$id" ]; then
+      echo "This removes $id for good: its ledger, its root key, every person's key and every account."
+      echo "Nobody can get them back, and people's certificates stop working. Backups in the backups folder are not touched."
+      printf 'Type the company ID to go on: '
+      read -r answer
+      [ "$answer" = "$id" ] || stop "Nothing was removed."
+    fi
+    # A folder last started by an older release named other files in .env. These two are the ones here now.
+    [ -f compose.generated.yaml ] || echo "services: {}" >compose.generated.yaml
+    export COMPOSE_PATH_SEPARATOR=:
+    export COMPOSE_FILE=compose.yaml:compose.generated.yaml
+    quiet docker compose --profile https --profile tools down --volumes --remove-orphans || stop "Not everything could be removed."
+    rm -f .env compose.generated.yaml
+    echo "$id is removed from this server."
+    ;;
+
+  *)
+    # The list at the top of this file is the help.
+    sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

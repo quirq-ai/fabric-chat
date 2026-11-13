@@ -4,5 +4,12 @@ node_modules/
 dist/
 *.log
 
+# Made by `npm run bundle`, and where the app keeps accounts if it is ever run as one company outside Docker.
+build/
+.data/
+
 # Single-file copies of the Markdown documents, made for sending to someone. GitHub shows the Markdown itself.
 docs/*.html
+
+# Companies started on this machine from node-template, each in a folder of its own. Their keys are in Docker volumes, not here.
+companies/

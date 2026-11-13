@@ -84,6 +84,29 @@ export const ms = (value: number) => (value >= 1000 ? `${(value / 1000).toFixed(
 export function scopeWords(net: Net, workspace: Workspace, scope: Scope, membersOnly: boolean) {
   const holders = scope.orgs.map((code) => net.org(code).name);
   const outsiders = workspace.orgs.filter((code) => !scope.orgs.includes(code)).map((code) => net.org(code).name);
+  if (workspace.orgs.length === 1) {
+    // A company's own workspace: no other company holds any part of it, so the only question is
+    // who inside the company can read a conversation.
+    const only = holders[0];
+    if (scope.kind === "public") {
+      return {
+        short: `Kept by ${only}`,
+        long: `${only} keeps this conversation on its own node, and no other company holds a copy. Everyone at ${only} can read it. Each message is written into a block in the clear, so the earlier versions of an edited message stay on the ledger.`,
+        send: `Everyone at ${only} can read what you post here.`,
+        warn: false,
+        holders,
+        outsiders,
+      };
+    }
+    return {
+      short: "Members only",
+      long: `Only the people in this conversation can read it. ${only} keeps the text in its node's private store, and the blocks carry only a hash of each message, so a deleted message is really gone. Whoever runs the company's node can still read what it stores.`,
+      send: "Only the people in this conversation can read it.",
+      warn: false,
+      holders,
+      outsiders,
+    };
+  }
   const everyone = workspace.orgs.length === 2 ? "both companies" : `all ${workspace.orgs.length} companies`;
   if (scope.kind === "public") {
     return {

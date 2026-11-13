@@ -34,7 +34,7 @@ func parseScope(name string) (*scope, error) {
 		return nil, fail("CHAT_BAD_SCOPE", "%q is not a scope", name)
 	}
 	for _, part := range parts {
-		if !mspRe.MatchString(part) {
+		if !plainMspRe.MatchString(part) {
 			return nil, fail("CHAT_BAD_SCOPE", "%q is not a scope", name)
 		}
 	}

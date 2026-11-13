@@ -73,13 +73,19 @@ const VERBS: Record<string, string> = {
 };
 
 function describe(tx: TxView, chat: ChatCtx, net: Net): { who: string; did: string; scope: string } {
-  if (tx.type === "config") return { who: "The founding companies", did: "set the channel's rules: who is on it, who orders it, and how that can change", scope: "" };
+  if (tx.type === "config") {
+    const founders = chat.workspace.orgs.length === 1 ? net.org(chat.workspace.orgs[0]).name : "The founding companies";
+    return { who: founders, did: "set the channel's rules: who is on it, who orders it, and how that can change", scope: "" };
+  }
   const org = tx.creator ? net.orgOfMsp(tx.creator.msp) : undefined;
   const isPerson = !!tx.creator && tx.creator.role === "client" && !tx.creator.name.includes("@");
   const who = isPerson ? chat.nameOf(`${tx.creator!.name}@${tx.creator!.msp}`) : org ? `${owned(org.name)} administrator` : "Someone";
   if (tx.chaincode === "_lifecycle") {
     if (tx.fn.startsWith("Approve")) return { who, did: "approved the chat chaincode on its company's behalf", scope: "" };
-    if (tx.fn.startsWith("Commit")) return { who, did: "committed the chat chaincode, once enough companies had approved it", scope: "" };
+    if (tx.fn.startsWith("Commit")) {
+      const alone = chat.workspace.orgs.length === 1;
+      return { who, did: alone ? "committed the chat chaincode: from this block on, its rules are in force" : "committed the chat chaincode, once enough companies had approved it", scope: "" };
+    }
     return { who, did: `called ${tx.fn}`, scope: "" };
   }
   const scope = tx.fn === "Join" ? "public" : (tx.args[0] ?? "");
@@ -250,11 +256,15 @@ function TxPanel({ selection, receipt, onSelect, onProblem }: { selection: Selec
   const ours = tx.chaincode === net.info.chaincode.name;
   const writes = tx.writes.filter((w) => w.namespace === tx.chaincode);
   const reads = tx.reads.filter((r) => r.namespace === tx.chaincode);
-  const orderers = chat.workspace.orgs.map((code) => net.org(code).orderer.split(".")[0] + "." + net.org(code).orderer.split(".")[1]);
+  const alone = chat.workspace.orgs.length === 1;
+  // The sandbox's orderers have long names that differ only at the start. A company's own is shown whole.
+  const orderers = chat.workspace.orgs.map((code) => (net.info.mode === "company" ? net.org(code).orderer : net.org(code).orderer.split(".")[0] + "." + net.org(code).orderer.split(".")[1]));
   const rule = !ours
     ? ""
     : !scope || scope.kind === "public"
-      ? `The rule on this channel: more than half of its ${chat.workspace.orgs.length} companies must sign.`
+      ? alone
+        ? `The rule on this channel: ${owned(net.org(chat.workspace.orgs[0]).name)} peer must sign. On a channel shared with other companies, more than half of them must.`
+        : `The rule on this channel: more than half of its ${chat.workspace.orgs.length} companies must sign.`
       : scope.kind === "shared"
         ? "Only the companies that keep this scope were asked, so no other company's peer ever received the text."
         : `Only ${owned(net.org(scope.orgs[0]).name)} own peer was asked: the scope belongs to that company alone.`;
@@ -290,7 +300,9 @@ function TxPanel({ selection, receipt, onSelect, onProblem }: { selection: Selec
                 );
               })}
             </ul>
-            <p className="dim small">Each of these peers ran the chaincode and signed the same result. {rule}</p>
+            <p className="dim small">
+              {tx.endorsers.length === 1 ? "This peer ran the chaincode and signed the result." : "Each of these peers ran the chaincode and signed the same result."} {rule}
+            </p>
             {receipt && <p className="mono small">took {ms(receipt.endorseMs)}</p>}
           </li>
           <li>
@@ -299,10 +311,15 @@ function TxPanel({ selection, receipt, onSelect, onProblem }: { selection: Selec
               into <b>block {block.number}</b>, as transaction {tx.index + 1} of {block.txCount}
             </p>
             <p className="dim small">
-              by this channel's orderers ({listNames(orderers)}), which agree on one order using Raft. They never run the chaincode
-              {scope && scope.kind !== "public" ? ", and for this transaction they saw only hashes." : "."}
+              {alone ? `by this channel's orderer (${orderers[0]}). It never runs the chaincode` : `by this channel's orderers (${listNames(orderers)}), which agree on one order using Raft. They never run the chaincode`}
+              {scope && scope.kind !== "public" ? `, and for this transaction ${alone ? "it" : "they"} saw only hashes.` : "."}
             </p>
-            {receipt && <p className="mono small">handed over in {ms(receipt.orderMs)}</p>}
+            {receipt && (
+              <p className="mono small">
+                handed over in {ms(receipt.orderMs)}
+                {receipt.offers > 1 ? ` · offered ${receipt.offers} times before an orderer took it` : ""}
+              </p>
+            )}
           </li>
           <li className={tx.valid ? "good" : "bad"}>
             <h4>4 · Checked and committed</h4>
@@ -348,15 +365,21 @@ function TxPanel({ selection, receipt, onSelect, onProblem }: { selection: Selec
           <ul className="holdings">
             {held.holdings.map((holding) => {
               const org = net.org(holding.org);
-              const state = !holding.onChannel ? "none" : holding.held ? "text" : holding.ledgerHash ? "hash" : "gone";
+              // On a company's own server another company's peer cannot be asked. What it holds
+              // then follows from Fabric's rules, and is said that way.
+              const byRule = holding.asked === false;
+              const state = !holding.onChannel ? "none" : holding.held ? "text" : holding.older ? "older" : byRule || holding.ledgerHash ? "hash" : "gone";
               return (
                 <li key={holding.org} className={state} style={{ "--org": org.color } as CSSProperties}>
                   <i className={state === "text" ? "dot on" : "dot"} />
                   <div>
                     <b>{org.name}</b>
                     <p>
-                      {state === "text" && (holding.matches ? "Its peer holds the text, and the text matches the hash on the ledger." : "Its peer holds the text.")}
-                      {state === "hash" && "Its peer holds only the hash: proof of what was said, without the words."}
+                      {state === "text" && !byRule && (holding.matches ? "Its peer holds the text, and the text matches the hash on the ledger." : "Its peer holds the text.")}
+                      {state === "text" && byRule && "It was sent the text, as every company that keeps this conversation is. Only its own app can ask its peer."}
+                      {state === "hash" && !byRule && "Its peer holds only the hash: proof of what was said, without the words."}
+                      {state === "hash" && byRule && "It was sent only the hash: proof of what was said, without the words."}
+                      {state === "older" && "Its peer holds an older version than the ledger records. The server was restored from a backup made before the last change, and that change was kept there only."}
                       {state === "gone" && "Its peer holds nothing for this key any more."}
                       {state === "none" && "Not on this channel. Its nodes hold no part of this ledger."}
                     </p>
@@ -501,17 +524,28 @@ function NetworkView({ onProblem }: { onProblem: (err: unknown) => void }) {
 
   if (!status) return <p className="hint">Asking each node…</p>;
   const ledgers = status.ledgers.filter((l) => l.channel === chat.ws);
-  const on = ledgers.filter((l) => l.onChannel);
+  // A company's own server sees its own nodes only, and cannot stop or start them. Another
+  // company on the workspace holds its own copy, which only its own app can look at.
+  const ownServer = net.info.mode === "company";
+  const on = ledgers.filter((l) => l.onChannel && l.state !== "unseen");
+  const unseen = ledgers.filter((l) => l.state === "unseen");
   const top = Math.max(...on.map((l) => l.height));
-  const agree = on.every((l) => l.height === top && l.tip === on[0].tip && l.state === "live");
+  const agree = on.length > 0 && on.every((l) => l.height === top && l.tip === on[0].tip && l.state === "live");
+  const alone = on.length === 1;
 
   return (
     <div className="network">
       <section>
-        <h3>Do they hold the same ledger?</h3>
+        <h3>{alone ? "The ledger" : "Do they hold the same ledger?"}</h3>
         <p className={`verdict ${agree ? "good" : "warn"}`}>
           {agree ? <Check size={15} /> : <TriangleAlert size={15} />}
-          {agree ? `All ${on.length} peers on this channel hold the same ${top} blocks.` : "Not every peer is in step right now."}
+          {alone
+            ? agree
+              ? `${owned(net.org(on[0].org).name)} peer holds ${top} blocks of this workspace.`
+              : `${owned(net.org(on[0].org).name)} peer is not answering right now.`
+            : agree
+              ? `All ${on.length} peers on this channel hold the same ${top} blocks.`
+              : "Not every peer is in step right now."}
         </p>
         <ul className="heights">
           {ledgers.map((ledger) => {
@@ -520,7 +554,9 @@ function NetworkView({ onProblem }: { onProblem: (err: unknown) => void }) {
               <li key={ledger.org} style={{ "--org": org.color } as CSSProperties} className={ledger.onChannel ? "" : "off"}>
                 <i className={ledger.onChannel ? "dot on" : "dot"} />
                 <b>{org.name}</b>
-                {ledger.onChannel ? (
+                {ledger.state === "unseen" ? (
+                  <span>holds its own copy, which only its own app can look at</span>
+                ) : ledger.onChannel ? (
                   <span>
                     {ledger.height} blocks · newest <Hash value={ledger.tip} head={6} tail={4} />
                     {ledger.state !== "live" && <em> · not answering</em>}
@@ -533,14 +569,37 @@ function NetworkView({ onProblem }: { onProblem: (err: unknown) => void }) {
             );
           })}
         </ul>
-        <p className="dim small">Nobody copies the ledger from anybody else's database. Each peer gets the blocks from the orderers and checks every transaction itself. Equal hashes mean they all reached the same result.</p>
+        <p className="dim small">
+          {unseen.length > 0
+            ? "Nobody copies the ledger from anybody else's database. Each company's peer gets the blocks from the orderers and checks every transaction itself. A block's hash is the same at every company that holds it, so two companies can compare the newest hash to be sure they hold the same ledger."
+            : alone
+              ? "The peer gets every block from the orderer and checks each transaction itself before it stores it. No other company is on this workspace."
+              : "Nobody copies the ledger from anybody else's database. Each peer gets the blocks from the orderers and checks every transaction itself. Equal hashes mean they all reached the same result."}
+        </p>
       </section>
 
       <section>
         <h3>The nodes</h3>
-        {net.info.orgs.map((org) => (
+        {net.info.orgs
+          .filter((org) => org.own !== false || chat.workspace.orgs.includes(org.code))
+          .map((org) => (
           <div key={org.code} className="org-nodes" style={{ "--org": org.color } as CSSProperties}>
             <h4>{org.name}</h4>
+            {org.own === false && (
+              <ul>
+                <li>
+                  <i className="lamp" title={`Run by ${org.name}`} />
+                  <span className="kind">peer</span>
+                  <span className="mono small">{org.peer}</span>
+                </li>
+                <li>
+                  <i className="lamp" title={`Run by ${org.name}`} />
+                  <span className="kind">orderer</span>
+                  <span className="mono small">{org.orderer}</span>
+                </li>
+                <li className="dim small">Run by {org.name} on its own server. This server cannot see whether they are up.</li>
+              </ul>
+            )}
             <ul>
               {status.nodes
                 .filter((node) => node.org === org.code)
@@ -551,7 +610,7 @@ function NetworkView({ onProblem }: { onProblem: (err: unknown) => void }) {
                       <i className={running ? "lamp on" : "lamp"} title={node.state} />
                       <span className="kind">{node.kind === "ca" ? "CA" : node.kind}</span>
                       <span className="mono small">{node.name}</span>
-                      {node.kind === "database" && running && (
+                      {node.kind === "database" && running && org.couchdb && (
                         <a href={org.couchdb} target="_blank" rel="noreferrer" title="Open this company's state database (CouchDB). The admin password is in .generated/secrets.json">
                           <Database size={13} />
                           <ExternalLink size={11} />
@@ -570,20 +629,28 @@ function NetworkView({ onProblem }: { onProblem: (err: unknown) => void }) {
         ))}
       </section>
 
-      <section>
-        <h3>Things to try</h3>
-        <ul className="try">
-          <li>
-            <b>Stop one company's peer</b>, then post in an open channel. It still commits: two of three companies can endorse. Start the peer again and watch its block count catch up.
-          </li>
-          <li>
-            <b>Stop the peer of one side of a private channel</b>, then post there. It is refused: both companies that keep the scope must endorse.
-          </li>
-          <li>
-            <b>Stop one orderer.</b> Nothing changes: Raft needs two of three. Stop a second and nothing commits until one comes back.
-          </li>
-        </ul>
-      </section>
+      {ownServer ? (
+        <section>
+          <p className="dim small">
+            These are {owned(net.org(chat.me.org).name)} own nodes, as this server sees them. They are started and stopped on the server with <code>./chat</code>, not from here.
+          </p>
+        </section>
+      ) : (
+        <section>
+          <h3>Things to try</h3>
+          <ul className="try">
+            <li>
+              <b>Stop one company's peer</b>, then post in an open channel. It still commits: two of three companies can endorse. Start the peer again and watch its block count catch up.
+            </li>
+            <li>
+              <b>Stop the peer of one side of a private channel</b>, then post there. It is refused: both companies that keep the scope must endorse.
+            </li>
+            <li>
+              <b>Stop one orderer.</b> Nothing changes: Raft needs two of three. Stop a second and nothing commits until one comes back.
+            </li>
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

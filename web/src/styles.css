@@ -550,6 +550,275 @@ button.tiny {
   color: var(--ink-2);
 }
 
+/* ---------------------------------------------------------------- a company's own server: sign-in, invitations, people */
+
+.gate {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 32px 20px;
+  background: var(--bg-2);
+}
+.gate-card {
+  width: 100%;
+  max-width: 400px;
+  display: grid;
+  gap: 14px;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--org);
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+.gate-card h1 {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+.gate-card > p {
+  color: var(--ink-2);
+}
+.gate-card .primary {
+  padding: 10px 14px;
+}
+.gate-foot {
+  max-width: 400px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.password-box,
+.add-member-form,
+.link-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg-2);
+}
+.row.wrap {
+  flex-wrap: wrap;
+}
+.members {
+  display: grid;
+  gap: 12px;
+  font-size: 13.5px;
+}
+.add-member {
+  justify-self: start;
+}
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.form label.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 450;
+  color: var(--ink);
+}
+.link-box {
+  border: 1px solid color-mix(in srgb, var(--good) 35%, transparent);
+  background: var(--good-bg);
+  color: var(--ink-2);
+}
+.link-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--good);
+}
+.link-head span {
+  color: var(--ink);
+}
+.link-row {
+  display: flex;
+  gap: 8px;
+}
+.link-row input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.member-rows li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.member-who {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.member-who small {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.member-acts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--ink-2);
+  background: var(--bg-3);
+}
+.tag.wait {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+
+/* Other companies: cards, shared workspaces, invitations */
+.sharing section {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.sharing h3 {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.sharing textarea {
+  width: 100%;
+  min-height: 62px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  resize: vertical;
+  overflow-wrap: anywhere;
+}
+.to-send {
+  display: grid;
+  gap: 6px;
+}
+.fingerprint {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.shared-list {
+  display: grid;
+}
+.shared-list li {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.shared-list li:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.shared-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.shared-members {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.shared-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.shared-status svg {
+  flex: none;
+}
+.shared-list .ghost {
+  justify-self: start;
+}
+.pasted {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.pasted-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.card-seen,
+.invited li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--org);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.card-seen.bad {
+  border-left-color: var(--bad);
+}
+.card-seen .error,
+.invited .error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.invited {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+}
+.invited ul {
+  display: grid;
+  gap: 6px;
+}
+@media (max-width: 560px) {
+  .gate-card {
+    padding: 20px;
+  }
+  .member-rows li {
+    flex-wrap: wrap;
+  }
+  .member-acts {
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: 46px;
+  }
+  .pair {
+    grid-template-columns: 1fr;
+  }
+  .link-row {
+    flex-direction: column;
+  }
+}
+
 /* ---------------------------------------------------------------- the chat screen */
 
 .app {

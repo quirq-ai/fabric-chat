@@ -38,11 +38,15 @@ const (
 
 var (
 	handleRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
-	mspRe    = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
-	userRe   = regexp.MustCompile(`^([a-z0-9][a-z0-9._-]{0,31})@([A-Za-z0-9]{1,64})$`)
-	convRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
-	msgRe    = regexp.MustCompile(`^[0-9]{13}-[0-9a-f]{8}$`)
-	emojiRe  = regexp.MustCompile(`^[a-z0-9_+-]{1,24}$`)
+	// A company's ID (its MSP ID) is either a plain word such as AsterMSP, or a domain name the
+	// company owns such as aster.example. A domain name needs no registry to be unique.
+	mspRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,62}[A-Za-z0-9])?$`)
+	// The companies in the name of a shared collection are joined with "-", so there they must be plain words.
+	plainMspRe = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
+	userRe     = regexp.MustCompile(`^([a-z0-9][a-z0-9._-]{0,31})@([A-Za-z0-9]([A-Za-z0-9.-]{0,62}[A-Za-z0-9])?)$`)
+	convRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
+	msgRe      = regexp.MustCompile(`^[0-9]{13}-[0-9a-f]{8}$`)
+	emojiRe    = regexp.MustCompile(`^[a-z0-9_+-]{1,24}$`)
 )
 
 // Profile is one person's entry in a workspace's directory. The ID comes from their certificate:

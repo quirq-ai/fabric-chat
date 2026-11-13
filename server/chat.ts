@@ -2,7 +2,7 @@
 // Writes become transactions, signed with the person's own key.
 import { randomBytes } from "node:crypto";
 import { ChatError, PUBLIC, network, orgByCode, scopeOf, scopesFor, scopesOf, type Scope, type WorkspaceConfig } from "./config";
-import { evaluate, submit, type Receipt } from "./fabric";
+import { OLDER_COPY, evaluate, submit, type Receipt } from "./fabric";
 import { feedOf } from "./ledger";
 import { serviceIdentity, type Identity } from "./people";
 
@@ -131,7 +131,10 @@ export function place(workspace: WorkspaceConfig, memberIds: string[]): Scope {
   const companies = new Set(memberIds.map((id) => network().orgs.find((o) => o.msp === id.split("@")[1])?.code ?? "?"));
   const fits = scopesOf(workspace).filter((scope) => [...companies].every((code) => scope.orgs.includes(code)));
   if (fits.length === 0) throw new ChatError(400, "CHAT_WRONG_SCOPE", "Someone in that list works at a company outside this workspace.");
-  return fits.reduce((best, scope) => (scope.orgs.length < best.orgs.length ? scope : best));
+  // In a workspace of one company the shared ledger and the company's own collection cover the
+  // same company. The collection wins: a message deleted there is purged, not just blanked.
+  const smaller = (scope: Scope, best: Scope) => scope.orgs.length < best.orgs.length || (scope.orgs.length === best.orgs.length && best.kind === "public");
+  return fits.reduce((best, scope) => (smaller(scope, best) ? scope : best));
 }
 
 export interface NewConversation {
@@ -244,8 +247,19 @@ export interface Holding {
   held: boolean;
   /** True when the copy this peer stores hashes to the value the ledger carries. */
   matches: boolean;
+  /**
+   * False for another company in a shared workspace: its peer cannot be asked from here, so "held"
+   * says what Fabric's rules make true of it rather than what its peer answered.
+   */
+  asked: boolean;
   ledgerHash: string;
   note: string;
+  /**
+   * True when the company's peer stores an older version of the record than the ledger records. That
+   * is what a restore leaves of something changed after the backup, when the change was kept by
+   * this company alone.
+   */
+  older?: boolean;
 }
 
 /**
@@ -254,15 +268,20 @@ export interface Holding {
  * ask its own.
  */
 export async function holdings(workspace: WorkspaceConfig, scopeName: string, key: string): Promise<Holding[]> {
-  scopeOf(workspace, scopeName);
+  const scope = scopeOf(workspace, scopeName);
   return Promise.all(
     network().orgs.map(async (org): Promise<Holding> => {
-      if (!workspace.orgs.includes(org.code)) return { org: org.code, onChannel: false, held: false, matches: false, ledgerHash: "", note: "" };
+      if (!workspace.orgs.includes(org.code)) return { org: org.code, onChannel: false, held: false, matches: false, ledgerHash: "", note: "", asked: org.own };
+      // Another company's peer answers only to that company. What it holds follows from the scope:
+      // every company a scope names is sent the text, and every other company on the channel its hash.
+      if (!org.own) return { org: org.code, onChannel: true, held: scope.orgs.includes(org.code), matches: false, ledgerHash: "", note: "", asked: false };
       try {
         const found = await evaluate<{ held: boolean; heldHash: string; ledgerHash: string; note: string }>(serviceIdentity(org), workspace.channel, "Inspect", [scopeName, key]);
-        return { org: org.code, onChannel: true, held: found.held, matches: found.held && found.heldHash === found.ledgerHash, ledgerHash: found.ledgerHash, note: found.note };
+        // Fabric will not hand out a version older than the one the ledger records. The chaincode passes on the end of what it says.
+        const older = !found.held && /^\d+\}$/.test(found.note);
+        return { org: org.code, onChannel: true, held: found.held, matches: found.held && found.heldHash === found.ledgerHash, ledgerHash: found.ledgerHash, note: older ? OLDER_COPY : found.note, asked: true, older };
       } catch (err) {
-        return { org: org.code, onChannel: true, held: false, matches: false, ledgerHash: "", note: err instanceof Error ? err.message : "This peer did not answer." };
+        return { org: org.code, onChannel: true, held: false, matches: false, ledgerHash: "", note: err instanceof Error ? err.message : "This peer did not answer.", asked: true };
       }
     }),
   );

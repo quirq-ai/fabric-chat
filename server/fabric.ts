@@ -8,7 +8,7 @@
 import { performance } from "node:perf_hooks";
 import { readFileSync } from "node:fs";
 import * as grpc from "@grpc/grpc-js";
-import { connect, hash, signers, GatewayError, StatusCode, type Contract, type Gateway, type Network } from "@hyperledger/fabric-gateway";
+import { connect, hash, signers, GatewayError, StatusCode, type Contract, type Gateway, type Network, type Status, type SubmittedTransaction } from "@hyperledger/fabric-gateway";
 import { gateway as gatewayProtos } from "@hyperledger/fabric-protos";
 import { ChatError, file, network, type OrgConfig } from "./config";
 import { decodeEnvelope } from "./decode";
@@ -72,6 +72,10 @@ const statusOf: Record<string, number> = {
   CHAT_GONE: 410,
 };
 
+/** What to say about a record that this server holds in an older version than the ledger records. */
+export const OLDER_COPY =
+  "This server holds an older version of this than the ledger records. The server was restored from a backup made before the last change, and that change was kept here only, so it is lost. This can still be read as it was, but no longer changed.";
+
 /** Turns whatever Fabric threw into an error with a code and plain words. */
 export function translate(err: unknown): ChatError {
   if (err instanceof ChatError) return err;
@@ -80,7 +84,16 @@ export function translate(err: unknown): ChatError {
     // The chaincode's own refusals start with a code, for example CHAT_NOT_MEMBER.
     for (const text of texts) {
       const match = /(CHAT_[A-Z_]+): ([^\n]*)/.exec(text);
-      if (match) return new ChatError(statusOf[match[1]] ?? 500, match[1], match[2].trim());
+      if (!match) continue;
+      // A record that a company's own store holds in an older version than the ledger records. It
+      // is what a restore leaves of something that was changed after the backup: the change was
+      // kept on that server only. Fabric then refuses to hand out the older version by its key
+      // ("private data matching public hash version is not available ... TxNum: 0}"), and the
+      // chaincode passes on the end of that sentence.
+      if (match[1] === "CHAT_NOT_HELD" && /: \d+\}$/.test(match[2].trim())) {
+        return new ChatError(409, "CHAT_OLDER_COPY", OLDER_COPY);
+      }
+      return new ChatError(statusOf[match[1]] ?? 500, match[1], match[2].trim());
     }
     const all = texts.join(" | ");
     // The peer answered, but the orderers it handed the transaction to could not take it.
@@ -141,6 +154,8 @@ export interface Receipt {
   commitMs: number;
   /** More than 1 when an earlier try lost a race with another transaction and was sent again. */
   attempts: number;
+  /** More than 1 when the orderers did not take the transaction at first and it was offered to them again. */
+  offers: number;
 }
 
 export interface SubmitOptions {
@@ -159,6 +174,54 @@ const validationName = (code: number) => Object.entries(StatusCode).find(([, val
  */
 const retryable = new Set(["MVCC_READ_CONFLICT", "PHANTOM_READ_CONFLICT"]);
 
+/**
+ * An endorsed transaction that the orderers did not take is offered to them again, unchanged, for
+ * up to this long. It keeps its ID and a ledger takes an ID once, so offering it again cannot write
+ * it twice. Choosing a leader takes the orderers up to ten seconds, and an orderer that still
+ * follows the one that has gone holds a transaction for seven before it gives it back. When two
+ * orderers stop and start within seconds of each other, those waits add up.
+ */
+const offerFor = 30_000;
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A channel has one orderer for each company on it. */
+const orderersOf = (channel: string) => network().workspaces.find((workspace) => workspace.channel === channel)?.orgs.length ?? 0;
+
+/** Why the orderers did not take a transaction, for the server's own log. */
+function refusal(err: unknown): string {
+  if (!(err instanceof GatewayError)) return err instanceof Error ? err.message : String(err);
+  const each = err.details.map((detail) => `${detail.address}: ${detail.message}`).join("; ");
+  return `${grpc.status[err.code] ?? err.code}: ${err.cause?.details || err.message}${each ? ` [${each}]` : ""}`.slice(0, 700);
+}
+
+/** An orderer that is named in a workspace's rules but is not on its channel: its company has not accepted the invitation yet. */
+const notJoined = (err: unknown) => err instanceof GatewayError && /channel creation request not allowed/i.test(`${err.message} ${err.cause?.details ?? ""}`);
+
+/**
+ * Whether a refusal by the orderers passes by itself. Given what handing over a transaction threw.
+ * The peer hands a transaction to the channel's orderers one at a time, in a random order, until
+ * one takes it.
+ *
+ * An orderer whose company was invited to a workspace and has not joined yet does not know the
+ * channel. It says so, and the peer stops there without asking the others. The next try starts
+ * with another orderer.
+ *
+ * When no orderer took it, the peer names the ones it could not reach at all. If most of the
+ * channel's orderers are still running, they are choosing a leader, because one of them has just
+ * stopped or started. If most cannot be reached, waiting does not help: too few are running.
+ *
+ * An orderer that still follows a leader which has gone holds a transaction for seconds before
+ * giving it back, so the answer can come too late. Offering it again is safe then too.
+ */
+function passesByItself(err: unknown, orderers: number): boolean {
+  if (!(err instanceof GatewayError)) return false;
+  // Too late and cancelled are the same thing seen from two ends: the wait for an answer ran out.
+  if (notJoined(err) || err.code === grpc.status.DEADLINE_EXCEEDED || err.code === grpc.status.CANCELLED) return true;
+  if (err.code !== grpc.status.UNAVAILABLE) return false;
+  const running = orderers - err.details.length;
+  return running * 2 > orderers;
+}
+
 /** Sends a transaction through endorse, submit and commit, and waits for its block. */
 export async function submit<T>(identity: Identity, channel: string, fn: string, options: SubmitOptions): Promise<{ result: T; receipt: Receipt }> {
   const contract = contractOf(identity, channel);
@@ -172,9 +235,37 @@ export async function submit<T>(identity: Identity, channel: string, fn: string,
       });
       const transaction = await proposal.endorse();
       const endorsed = performance.now();
-      const submitted = await transaction.submit();
+      let offers = 1;
+      let submitted: SubmittedTransaction;
+      for (;;) {
+        try {
+          submitted = await transaction.submit();
+          break;
+        } catch (err) {
+          const again = passesByItself(err, orderersOf(channel)) && performance.now() - endorsed < offerFor;
+          // An orderer that has not joined is expected for as long as an invitation is open. Anything else is worth a line.
+          if (!again || (offers === 1 && !notJoined(err))) {
+            console.warn(`[ledger] ${channel}: the orderers did not take ${transaction.getTransactionId().slice(0, 12)} at offer ${offers}, ${again ? "offering it again" : "giving up"}. ${refusal(err)}`);
+          }
+          if (!again) throw err;
+          await pause(Math.min(50 * 2 ** (offers - 1), 800));
+          offers++;
+        }
+      }
       const ordered = performance.now();
-      const status = await submitted.getStatus();
+      let status: Status;
+      try {
+        status = await submitted.getStatus();
+      } catch (err) {
+        // Not the same as a refusal: an orderer has it. A leader that loses the others keeps what
+        // it was given and writes it when they return, so nobody can say yet that it failed.
+        console.warn(`[ledger] ${channel}: an orderer took ${transaction.getTransactionId().slice(0, 12)}, and no block with it arrived. ${refusal(err)}`);
+        throw new ChatError(
+          504,
+          "LEDGER_NOT_CONFIRMED",
+          "An orderer took this, but no block containing it reached your company's peer within 30 seconds. Too few of this channel's orderers may be running for them to agree. It may still be written when they are, so look before sending it again.",
+        );
+      }
       const committed = performance.now();
 
       const validation = validationName(status.code);
@@ -194,6 +285,7 @@ export async function submit<T>(identity: Identity, channel: string, fn: string,
           orderMs: Math.round(ordered - endorsed),
           commitMs: Math.round(committed - ordered),
           attempts: attempt,
+          offers,
         },
       };
     } catch (err) {

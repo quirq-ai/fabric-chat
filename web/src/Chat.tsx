@@ -2,10 +2,12 @@
 // the ledger panel. It keeps itself current by listening to the blocks the person's own company's
 // peer commits.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Blocks, CircleHelp, Hash as HashIcon, Lock, LogOut, Menu, Plus, TriangleAlert, X } from "lucide-react";
+import { Blocks, Building2, CircleHelp, Hash as HashIcon, Lock, LogOut, Menu, Plus, TriangleAlert, Users, X } from "lucide-react";
 import { ApiError, api } from "./api";
 import { Avatar, StorageDots, listNames, stored, useLatest, useNet } from "./bits";
 import { ChatContext, keyOf, parseConv, type Active, type ChatCtx, type Selection } from "./chatctx";
+import { CompaniesDialog } from "./Companies";
+import { PeopleDialog } from "./Company";
 import { ConversationPane, type PendingPost } from "./Conversation";
 import { IdentityCard, NewConversation } from "./dialogs";
 import { Guide } from "./Guide";
@@ -20,12 +22,30 @@ interface Props {
   startWs: string;
   startConv: string;
   onSignOut: () => void;
+  /** Called when the list of workspaces has changed, so the network's facts are read again. */
+  onChanged?: () => void;
 }
 
-type Dialog = null | "channel" | "dm" | "identity" | "guide";
+type Dialog = null | "channel" | "dm" | "identity" | "guide" | "people" | "companies";
 
-export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
+/**
+ * The two letters on each workspace's tile: the first two of its name. When two workspaces would
+ * then look alike, as "Harbor Co" and "Harbor and Dune" would, each gets its initials instead.
+ */
+function tileLetters(workspaces: [channel: string, name: string][]): Map<string, string> {
+  const start = (name: string) => name.slice(0, 2);
+  const initials = (name: string) => {
+    const words = name.split(/\s+/).filter((word) => word && !/^(and|the|of|&|\+)$/i.test(word));
+    return words.length > 1 ? (words[0][0] + words[words.length - 1][0]).toUpperCase() : start(name);
+  };
+  const alike = (name: string) => workspaces.filter(([, other]) => start(other) === start(name)).length > 1;
+  return new Map(workspaces.map(([channel, name]) => [channel, alike(name) ? initials(name) : start(name)]));
+}
+
+export function Chat({ user, embed, startWs, startConv, onSignOut, onChanged }: Props) {
   const net = useNet();
+  // On a company's own server the person is whoever signed in, and is not named in the address.
+  const ownServer = net.info.mode === "company";
   const [me, setMe] = useState<Me | null>(null);
   const [fatal, setFatal] = useState("");
   const [ws, setWs] = useState(startWs);
@@ -46,6 +66,7 @@ export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
   const [menu, setMenu] = useState(false);
 
   const wsRef = useLatest(ws);
+  const onChangedRef = useLatest(onChanged);
   const activeRef = useLatest(active);
   const workspace = net.workspace(ws);
 
@@ -136,8 +157,8 @@ export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
   }, [overview, active]);
 
   useEffect(() => {
-    noteRoute({ as: user, ws, conv: activeKey, embed });
-  }, [user, ws, activeKey, embed]);
+    noteRoute({ as: ownServer ? "" : user, ws, conv: activeKey, embed });
+  }, [user, ws, activeKey, embed, ownServer]);
 
   /* ---- live: one event per block this company's peer commits ---- */
 
@@ -170,6 +191,18 @@ export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
       }
       setBlocks((was) => (was.length && block.number <= was[was.length - 1].number ? was : [...was, block].slice(-120)));
       if (block.txs.some((tx) => tx.valid && tx.event?.name === "chat")) refresh();
+    });
+    // A workspace was shared with another company, or became ready, while this page was open.
+    source.addEventListener("workspaces", () => {
+      onChangedRef.current?.();
+      void api.me(user).then(
+        (mine) => {
+          setMe(mine);
+          // Someone who had no workspace to open until now is taken to the first one.
+          setWs((current) => (mine.workspaces.includes(current) ? current : (mine.workspaces[0] ?? "")));
+        },
+        () => undefined,
+      );
     });
     source.onerror = () => setLive(false);
     return () => {
@@ -291,6 +324,9 @@ export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
     if (channel === ws) return;
     setWs(channel);
     setActive(null);
+    // The list of the workspace being left must go in the same step. Otherwise its #general is
+    // picked again for a moment, and asked for in a workspace that may not have one.
+    setOverview(null);
     setSelected(null);
     setThread(null);
     setStirred((was) => ({ ...was, [channel]: false }));
@@ -302,10 +338,10 @@ export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
     return (
       <div className="splash">
         <div className="splash-card">
-          <h1>That person cannot sign in</h1>
+          <h1>{ownServer ? "You cannot be signed in just now" : "That person cannot sign in"}</h1>
           <p>{fatal}</p>
           <button className="primary" onClick={onSignOut}>
-            Choose someone else
+            {ownServer ? "Sign out" : "Choose someone else"}
           </button>
         </div>
       </div>
@@ -319,6 +355,7 @@ export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
   const directs = conversations.filter((c) => c.kind === "dm").sort((a, b) => b.lastAt.localeCompare(a.lastAt));
   const unread = (conv: Conversation) => conv.lastBy !== user && conv.lastAt > (seen[`${ws}/${keyOf(conv)}`] ?? "") && (!active || keyOf(conv) !== keyOf(active));
   const myWorkspaces = me.workspaces.map((channel) => net.workspace(channel)).filter((w) => !!w);
+  const tiles = tileLetters(myWorkspaces.map((w) => [w.channel, w.name]));
 
   const row = (conv: Conversation) => {
     const scope = ctx.scopeOf(conv.scope);
@@ -349,18 +386,28 @@ export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
           <nav className="rail" aria-label="Workspaces">
             {myWorkspaces.map((w) => (
               <button key={w.channel} className={`ws${w.channel === ws ? " active" : ""}`} onClick={() => switchWorkspace(w.channel)} title={`${w.name}: Fabric channel "${w.channel}", shared by ${listNames(w.orgs.map((c) => net.org(c).name))}`}>
-                {w.name.slice(0, 2)}
+                {tiles.get(w.channel)}
                 {stirred[w.channel] && w.channel !== ws && <i className="stir" />}
               </button>
             ))}
             <span className="rail-gap" />
+            {ownServer && me.role === "admin" && (
+              <button className="rail-btn" onClick={() => setDialog("people")} title="People: add someone, or make a new link" aria-label="People">
+                <Users size={19} />
+              </button>
+            )}
+            {ownServer && me.role === "admin" && (
+              <button className="rail-btn" onClick={() => setDialog("companies")} title="Other companies: share a workspace with one" aria-label="Other companies">
+                <Building2 size={19} />
+              </button>
+            )}
             <button className="rail-btn" onClick={() => setDialog("guide")} title="How it works" aria-label="How it works">
               <CircleHelp size={19} />
             </button>
             <button className={`rail-btn${ledgerOpen ? " on" : ""}`} onClick={() => setLedgerOpen((was) => !was)} title="Under the hood: the ledger" aria-label="Show or hide the ledger panel">
               <Blocks size={19} />
             </button>
-            <button className="rail-btn" onClick={onSignOut} title="Switch person" aria-label="Switch person">
+            <button className="rail-btn" onClick={onSignOut} title={ownServer ? "Sign out" : "Switch person"} aria-label={ownServer ? "Sign out" : "Switch person"}>
               <LogOut size={18} />
             </button>
           </nav>
@@ -464,6 +511,8 @@ export function Chat({ user, embed, startWs, startConv, onSignOut }: Props) {
         )}
 
         {dialog === "guide" && <Guide onClose={() => setDialog(null)} />}
+        {dialog === "people" && <PeopleDialog onClose={() => setDialog(null)} />}
+        {dialog === "companies" && <CompaniesDialog onClose={() => setDialog(null)} />}
         {dialog === "identity" && <IdentityCard onClose={() => setDialog(null)} onSignOut={onSignOut} />}
         {(dialog === "channel" || dialog === "dm") && (
           <NewConversation

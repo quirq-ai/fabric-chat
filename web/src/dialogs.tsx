@@ -1,7 +1,7 @@
 // The two dialogs of the chat screen: starting a conversation, and looking at your own identity.
 import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
-import { Copy, Fingerprint, LogOut, TriangleAlert } from "lucide-react";
-import { ApiError, api } from "./api";
+import { Copy, Fingerprint, KeyRound, LogOut, TriangleAlert } from "lucide-react";
+import { ApiError, account, api } from "./api";
 import { Avatar, Hash, Modal, OrgChip, StorageDots, fullTime, owned, scopeWords, useNet } from "./bits";
 import { useChat } from "./chatctx";
 import type { Conversation, Receipt, Scope } from "./types";
@@ -31,7 +31,9 @@ export function NewConversation({ kind, onClose, onCreated }: NewProps) {
   const scope = useMemo<Scope | undefined>(() => {
     if (!membersOnly) return chat.workspace.scopes.find((s) => s.kind === "public");
     const companies = new Set([chat.me.org, ...picked.map((id) => chat.orgOf(id).code)]);
-    return chat.workspace.scopes.filter((s) => [...companies].every((code) => s.orgs.includes(code))).sort((a, b) => a.orgs.length - b.orgs.length)[0];
+    // Fewest companies first. Between two scopes of the same size, a private one comes first.
+    const size = (s: Scope) => s.orgs.length * 2 + Number(s.kind === "public");
+    return chat.workspace.scopes.filter((s) => [...companies].every((code) => s.orgs.includes(code))).sort((a, b) => size(a) - size(b))[0];
   }, [membersOnly, picked, chat]);
   const words = scope ? scopeWords(net, chat.workspace, scope, membersOnly) : null;
 
@@ -111,7 +113,9 @@ export function NewConversation({ kind, onClose, onCreated }: NewProps) {
                 {words.warn && <TriangleAlert size={14} />}
               </p>
               <p>{words.long}</p>
-              {membersOnly && !words.warn && <p className="dim small">The app picks the smallest scope that covers everyone's company. Add someone from another company and it widens.</p>}
+              {membersOnly && !words.warn && chat.workspace.orgs.length > 1 && (
+                <p className="dim small">The app picks the smallest scope that covers everyone's company. Add someone from another company and it widens.</p>
+              )}
             </div>
           )}
           {error && <p className="error">{error}</p>}
@@ -138,6 +142,9 @@ export function IdentityCard({ onClose, onSignOut }: { onClose: () => void; onSi
   const org = net.org(me.org);
   const cert = me.certificate;
   const [copied, setCopied] = useState(false);
+  // Only a company's own server has passwords. In the sandbox, choosing a person is the sign-in.
+  const ownServer = net.info.mode === "company";
+  const [changing, setChanging] = useState(false);
   return (
     <Modal title="Your identity" onClose={onClose} width={560}>
       <div className="identity">
@@ -181,7 +188,8 @@ export function IdentityCard({ onClose, onSignOut }: { onClose: () => void; onSi
         <p className="dim small">
           "Ledger ID" is what the chaincode itself reports when asked who is calling. It reads the name and the organisation from the certificate, so nobody can post as you by typing your name.
         </p>
-        <div className="row end">
+        {changing && <ChangePassword onDone={() => setChanging(false)} />}
+        <div className="row end wrap">
           <button
             className="ghost"
             onClick={() => {
@@ -190,11 +198,75 @@ export function IdentityCard({ onClose, onSignOut }: { onClose: () => void; onSi
           >
             <Copy size={15} /> {copied ? "Copied" : "Copy certificate"}
           </button>
+          {ownServer && !changing && (
+            <button className="ghost" onClick={() => setChanging(true)}>
+              <KeyRound size={15} /> Change password
+            </button>
+          )}
           <button className="ghost" onClick={onSignOut}>
-            <LogOut size={15} /> Switch person
+            <LogOut size={15} /> {ownServer ? "Sign out" : "Switch person"}
           </button>
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** A person changes their own password. It opens the app, not the key: the certificate stays the same. */
+function ChangePassword({ onDone }: { onDone: () => void }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [changed, setChanged] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await account.changePassword(current, next);
+      setChanged(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "It could not be changed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (changed) {
+    return (
+      <div className="password-box">
+        <p className="good">Your password is changed. Anywhere else you were signed in has been signed out.</p>
+        <div className="row end">
+          <button className="ghost" onClick={onDone}>
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <form className="form password-box" onSubmit={submit}>
+      <label>
+        Password now
+        <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+      </label>
+      <label>
+        New password
+        <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} minLength={10} maxLength={200} required />
+      </label>
+      <p className="dim small">At least 10 characters. Your certificate and your messages stay as they are.</p>
+      {error && <p className="error">{error}</p>}
+      <div className="row end">
+        <button type="button" className="ghost" onClick={onDone}>
+          Cancel
+        </button>
+        <button className="primary" disabled={busy || !current || next.length < 10}>
+          {busy ? "Changing…" : "Change password"}
+        </button>
+      </div>
+    </form>
   );
 }

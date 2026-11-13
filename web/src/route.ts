@@ -2,6 +2,9 @@
 //   /                                       choose who you are
 //   /?as=alice@AsterMSP&ws=commons&c=public/general   the chat, as one person
 //   /?view=compare&panes=alice@AsterMSP,bob@BirchMSP  several people side by side
+// On a company's own server the person comes from the session, not the address:
+//   /?ws=home&c=public/general                        the chat, as whoever is signed in
+//   /?invite=…                                        the page behind an invitation link
 export interface Route {
   as: string;
   ws: string;
@@ -10,6 +13,8 @@ export interface Route {
   view: string;
   embed: boolean;
   panes: string[];
+  /** The secret of an invitation link. Read from the address once and never written back to it. */
+  invite: string;
 }
 
 export function readRoute(): Route {
@@ -21,6 +26,7 @@ export function readRoute(): Route {
     view: query.get("view") ?? "",
     embed: query.get("embed") === "1",
     panes: (query.get("panes") ?? "").split(",").filter(Boolean),
+    invite: query.get("invite") ?? "",
   };
 }
 

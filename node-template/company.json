@@ -1,0 +1,21 @@
+{
+  "name": "Aster Labs",
+  "id": "aster.example",
+  "color": "#6c5ce7",
+  "hosts": {
+    "chat": "chat.aster.example",
+    "peer": "peer.aster.example",
+    "orderer": "orderer.aster.example"
+  },
+  "admin": {
+    "handle": "alice",
+    "name": "Alice Ahn",
+    "title": "Founder"
+  },
+  "listen": {
+    "address": "127.0.0.1",
+    "port": 8080
+  },
+  "images": "fabric-chat",
+  "release": "0.3.0"
+}

@@ -86,11 +86,17 @@ export class Feed {
 
 const feeds = new Map<string, Feed>();
 
-/** Starts one feed for each channel each company is on. */
+/**
+ * Starts one feed for each channel each of this server's own companies is on, where there is none
+ * yet. A company's own server calls it again every few seconds, because a workspace shared with
+ * another company can appear while the app runs.
+ */
 export function startFeeds(): void {
   for (const workspace of network().workspaces) {
     for (const code of workspace.orgs) {
-      const org = network().orgs.find((o) => o.code === code)!;
+      const org = network().orgs.find((o) => o.code === code);
+      // Another company's blocks are its own app's to follow.
+      if (!org?.own || feeds.has(`${code}/${workspace.channel}`)) continue;
       const feed = new Feed(org, workspace.channel);
       feeds.set(`${code}/${workspace.channel}`, feed);
       void feed.run();

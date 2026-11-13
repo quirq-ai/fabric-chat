@@ -1,14 +1,16 @@
 // People and their identities. On Fabric a person is not a row in a users table: they are a
 // certificate their company's CA signed, plus the private key that goes with it.
 //
-// This demo keeps every person's key in .generated/wallets and signs on their behalf, the way a
-// company's own app server would for its staff. A real deployment would keep keys in an HSM or on
-// the person's device, and each company would run its own copy of this server.
+// The sandbox keeps every person's key in .generated/wallets and signs on their behalf, the way a
+// company's own app server would for its staff. A company's own server does the same for its own
+// people only, with their keys locked on disk (wallet.ts) and an account each (accounts.ts).
 import { X509Certificate, createPrivateKey, type KeyObject } from "node:crypto";
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { ChatError, file, network, orgByCode, owned, type OrgConfig } from "./config";
+import { listAccounts } from "./accounts";
+import { ChatError, file, mode, network, orgByCode, owned, type OrgConfig } from "./config";
+import { openIdentity } from "./wallet";
 
 export interface Identity {
   /** The ID the chaincode derives from the certificate: its common name, then the company's MSP ID. */
@@ -19,7 +21,7 @@ export interface Identity {
   key: KeyObject;
 }
 
-const USER = /^([a-z0-9][a-z0-9._-]{0,31})@([A-Za-z0-9]{1,64})$/;
+const USER = /^([a-z0-9][a-z0-9._-]{0,31})@([A-Za-z0-9][A-Za-z0-9.-]{0,63})$/;
 const cache = new Map<string, Identity>();
 
 function load(id: string, handle: string, org: OrgConfig, certFile: string, keyFile: string): Identity {
@@ -28,13 +30,18 @@ function load(id: string, handle: string, org: OrgConfig, certFile: string, keyF
   return identity;
 }
 
-/** The identity of a person such as alice@AsterMSP, read from their company's wallet. */
+/** The identity of a person such as alice@AsterMSP or dana@dune.example, read from their company's wallet. */
 export function identityOf(userId: string): Identity {
   const cached = cache.get(userId);
   if (cached) return cached;
   const match = USER.exec(userId);
   const org = match && network().orgs.find((o) => o.msp === match[2]);
   if (!match || !org) throw new ChatError(401, "NO_IDENTITY", "Choose who you are first.");
+  if (mode === "company") {
+    const identity: Identity = { id: userId, handle: match[1], org, ...openIdentity(match[1]) };
+    cache.set(userId, identity);
+    return identity;
+  }
   const msp = file(path.join(org.wallet, match[1], "msp"));
   const certFile = path.join(msp, "signcerts", "cert.pem");
   const keyFile = path.join(msp, "keystore", "priv_sk");
@@ -65,6 +72,10 @@ const display = (handle: string) => handle.charAt(0).toUpperCase() + handle.slic
 
 /** Everyone who holds a certificate, company by company, in the order the companies are listed. */
 export function people(): Person[] {
+  if (mode === "company") {
+    const org = network().orgs[0];
+    return listAccounts().map((a) => ({ id: `${a.handle}@${org.msp}`, handle: a.handle, org: org.code, name: a.name, title: a.title }));
+  }
   return network().orgs.flatMap((org) => {
     const wallet = file(org.wallet);
     if (!existsSync(wallet)) return [];

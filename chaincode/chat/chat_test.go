@@ -340,3 +340,43 @@ func TestOverviewListsOnlyWhatTheCallerIsIn(t *testing.T) {
 		t.Fatalf("Carol should see only #general: %+v", carols[0])
 	}
 }
+
+// A company on its own server uses a domain name it owns as its ID, so its people read like
+// email addresses. Everything works the same, and its own collection is named after that ID.
+func TestACompanyIDCanBeADomainName(t *testing.T) {
+	const (
+		dana  = "dana@dune.example"
+		dev   = "dev@dune.example"
+		eve   = "eve@dune.example"
+		dunes = "_implicit_org_dune.example"
+	)
+	w := newWorld(t)
+	for _, who := range []string{dana, dev, eve} {
+		w.must(w.as(who, "", func(ctx ctxT) (string, error) { return chat.Join(ctx, `{"name":"`+who[:strings.Index(who, "@")]+`"}`) }))
+	}
+	me := decode[map[string]interface{}](t, w.must(w.as(dana, "", func(ctx ctxT) (string, error) { return chat.Whoami(ctx) })))
+	if me["id"] != dana || me["msp"] != "dune.example" {
+		t.Fatalf("the caller should be read as %s: %+v", dana, me)
+	}
+	w.channel(dana, scopePublic, "general")
+	w.post(dev, scopePublic, "general", "morning")
+
+	ops := w.channel(dana, dunes, "ops", dev)
+	msg := w.post(dana, dunes, ops.ID, "the depot code is 4417")
+	got := decode[thread](t, w.must(w.read(dev, dunes, ops.ID, "")))
+	if len(got.Messages) != 1 || got.Messages[0].Author != dana {
+		t.Fatalf("the other member should read it: %+v", got.Messages)
+	}
+	// Eve works at the same company, so its peer holds the conversation. She is still not in it.
+	w.refuse("CHAT_NOT_MEMBER")(w.read(eve, dunes, ops.ID, ""))
+	w.must(w.submit(dana, dunes, chat.Delete, fmt.Sprintf(`{"convId":%q,"msgId":%q}`, ops.ID, msg.ID)))
+	if w.private[dunes][keyMessage+ops.ID+"~"+msg.ID] != nil {
+		t.Fatal("the message is still in the collection after the purge")
+	}
+
+	// A shared collection is named by joining plain company IDs with "-". A domain name may hold a
+	// dash itself, so it cannot be told apart there, and is refused rather than guessed at.
+	w.refuse("CHAT_BAD_SCOPE")(w.read(dana, "dune.example-birch.example", ops.ID, ""))
+	w.refuse("CHAT_BAD_SCOPE")(w.read(dana, "_implicit_org_.example", ops.ID, ""))
+	w.refuse("CHAT_BAD_INPUT")(w.submit(dana, dunes, chat.AddMembers, `{"convId":"`+ops.ID+`","members":["someone@-bad-"]}`))
+}

@@ -1,8 +1,11 @@
 # Fabric Chat
 
-A Slack-style team chat where the database is a Hyperledger Fabric 2.5 ledger. Three made-up companies each run their own nodes, and every message is a transaction on the ledger they share. It was built to explain Fabric: every message can be followed through the network, and the app shows which companies' nodes hold its text.
+A Slack-style team chat where the database is a Hyperledger Fabric 2.5 ledger. It runs in two ways:
 
-Everything in it is test data: the companies, the people, the certificates and the messages.
+- **The sandbox.** Three made-up companies each run their own nodes on one laptop, and every message is a transaction on the ledger they share. It was built to explain Fabric: every message can be followed through the network, and the app shows which companies' nodes hold its text. Everything in it is test data.
+- **A company's own server.** The same app for one real company: its own keys, its own certificate authority, real sign-in, and workspaces it shares with other companies that run their own. See [A company on its own server](#a-company-on-its-own-server).
+
+Most of this page is about the sandbox.
 
 ![The chat with the ledger panel open](docs/screens/chat.png)
 
@@ -33,6 +36,12 @@ Then open http://localhost:4700 and choose who you are.
 | `npm run net:down` | Remove everything: containers, ledgers, certificates |
 | `npm run net:chaincode` | Rebuild and restart the chaincode after changing the Go code |
 | `npm test` | The chaincode's unit tests, then an end-to-end check against the running network |
+| `npm run images` | Build the three images a company's own server runs. With `-- --push <name>`, send them to a registry too |
+| `npm run company -- "<name>" <id>` | Start one more company on this machine, in a folder of its own under `companies/` |
+| `npm run test:company` | Launch a throwaway company from those images, run 86 checks against it, and remove it |
+| `npm run test:companies` | Launch three throwaway companies, have them share workspaces through their own apps, and remove them |
+| `npm run test:servers` | Two companies on two stand-in servers: images from a registry, HTTPS, a shared workspace, a backup and a restore. Needs five more images, which it names if they are missing |
+| `npm run test:upgrade -- scripts/releases/0.2.0 0.2.0` | Move two throwaway companies that share a workspace from an older release to this one. It needs the older release's two files, kept in that folder, and its images on the machine |
 
 `npm test` writes a few test channels to the ledger. A ledger cannot forget them, so run `npm run net:down` and `npm run net:up` afterwards if you want a clean one.
 
@@ -108,28 +117,119 @@ The app tells you where a conversation will be kept before you create it:
 4. **Edit, then delete.** In #general, the old versions stay under "Every version, still on the ledger". In #pricing, delete purges the text from both peers. Only the hashes in the old blocks remain.
 5. **Start a channel.** Tick people from different companies and watch "Kept by" change before you create it.
 6. **Add a person.** On the first screen, "Add a person" asks that company's CA to sign a new certificate. The new person can post at once.
-7. **Take a node away.** In the ledger panel, under Network, stop Cedar's peer and post in #general: it still commits, because two of three companies can endorse. Start it again and its block count catches up. Stop Birch's peer and post in #pricing: refused, because both companies that keep it must endorse. Stop two orderers and nothing commits.
+7. **Take a node away.** In the ledger panel, under Network, stop Cedar's peer and post in #general: it still commits, because two of three companies can endorse. Start it again and its block count catches up. Stop Birch's peer and post in #pricing: refused, because both companies that keep it must endorse. Stop one orderer and posts still commit: if it was the one leading, the next post takes up to ten seconds while the other two choose a new leader. Stop two orderers and nothing commits.
 
    ![The Network tab: every node, and whether the peers agree](docs/screens/network.png)
 8. **Switch to the Deal room** (the "De" tile). Under Network, Cedar is listed as holding nothing.
 9. **Look inside each company's database.** Open http://localhost:45984/_utils (Aster), http://localhost:45985/_utils (Birch) and http://localhost:45986/_utils (Cedar). The user is `admin` and the password is in `.generated/secrets.json`. Aster has a database named `commons_chat$$p$aster$m$s$p-$birch$m$s$p` holding the private messages. Cedar has only `commons_chat$$h…`, the hashes, and no `dealroom` databases at all.
 
-## From one laptop to many companies
+## A company on its own server
 
-This demo runs every company on one machine. The next step is each company running its own copy on its own server, adding its own people and connecting to other companies when it chooses to. [docs/many-companies.md](docs/many-companies.md) is a short guide to that: what each company runs, how two companies connect, what has to change in this code, and which repositories to make. Its main claims were tested with the scripts in [docs/lab](docs/lab).
+The sandbox runs every company on one machine and asks for no passwords. The plan is for each company to run its own copy on its own server, add its own people, and connect to other companies when it chooses to. [docs/many-companies.md](docs/many-companies.md) is a short guide to that plan, in five steps. The first three are built: a company can launch on its own with real sign-in, two or more such companies can share a workspace, and they can do it from separate servers, over HTTPS, with backups. That last step has run on a stand-in for two servers, not yet on two real ones.
+
+![The sign-in page of a company's own server](docs/screens/company-sign-in.png)
+
+Build the three images once:
+
+```bash
+npm run images
+```
+
+Then start a company from the template folder. `./chat` needs only Docker. On Windows run it in Git Bash, as `sh chat up`.
+
+```bash
+cd node-template
+```
+
+```bash
+./chat up
+```
+
+The first start takes about 25 seconds. It makes the company's root key on that machine, has the company's own certificate authority issue a certificate to each node, creates a home workspace that only this company is on, and prints a one-time link for the first administrator. She opens it, chooses a password, and adds everyone else from the People button. Each person gets a link of their own and chooses their own password.
+
+![The first administrator and a colleague in #general, with the company's own ledger beside them](docs/screens/company-chat.png)
+
+| | The sandbox | A company's own server |
+| --- | --- | --- |
+| Companies | Three, on one machine | One |
+| Started with | `npm run net:up`, then `npm run dev` | `./chat up` |
+| Needs | Docker and Node | Docker |
+| Signing in | Choose a person | A handle and a password. An administrator adds people |
+| A company's ID | `AsterMSP` | A domain name it owns, such as `aster.example`. People read like email addresses: `alice@aster.example` |
+| Certificates | Made by Fabric's test tool, `cryptogen` | Issued by the company's own certificate authority, under a root key made on its server |
+| People's keys | Plain files | Locked on disk. The key that locks them is kept in a different volume |
+| Other companies | In one network from the start | Each on its own. Two or more share a workspace by swapping cards and accepting an invitation |
+
+The template is three files: [company.json](node-template/company.json), the [chat](node-template/chat) command and [compose.yaml](node-template/compose.yaml). The [template's README](node-template/README.md) is the runbook: every setting, every command, and what is kept where. The same files are published by themselves as the template repository [fabric-chat-node](https://github.com/quirq-ai/fabric-chat-node).
+
+### Two companies share a workspace
+
+![An administrator starts a shared workspace from another company's card](docs/screens/companies-start.png)
+
+An administrator opens **Other companies** and does three things with the other company's administrator. Nothing secret changes hands.
+
+1. **They swap cards.** A card is a company's public face: its name, its root certificate and where its nodes are.
+2. **One starts a workspace** from the other's card, and sends back an invitation: the new ledger's first block, with both cards.
+3. **The other accepts.** Its node first works out what the block should say for those cards, and joins only if the block says exactly that.
+
+The two nodes then agree on the rules by themselves, and the workspace appears for everyone at both companies. Each company's people talk through their own company's node, and every message in an open channel is endorsed by both.
+
+![People of two companies in one workspace, each through their own company's node](docs/screens/companies-chat.png)
+
+To try it on one machine, start two companies:
+
+```bash
+npm run company -- "Aster Labs" aster.example
+```
+
+```bash
+npm run company -- "Dune Freight" dune.example
+```
+
+Each command makes a folder for the company under `companies/`, starts it on the next free port, and prints its first administrator's link. Every company started this way joins one Docker network, which stands in for the internet between them: it is the `dockerNetwork` setting in each `company.json`. `npm run test:companies` does the same with three throwaway companies, and checks the result.
+
+### On a real server
+
+Two lines in `company.json` put a company on the internet, once its three names point at the server:
+
+```json
+  "https": "auto",
+  "node": { "address": "0.0.0.0" },
+```
+
+- **HTTPS comes by itself.** A small proxy on the server asks Let's Encrypt for a certificate for the chat's name, and renews it.
+- **The node opens three ports** for other companies' servers: 7051, 7050 and 7055. Nothing else is opened, and `./chat status` says what is.
+- **The app says whether it can reach another company's node** as soon as an administrator pastes that company's card, and whether what answers there really is that company's.
+- **`./chat backup`** puts everything a company has into one file, locked with a passphrase. **`./chat restore`** brings the company back on an empty server.
+- **The images come from a registry.** `npm run images -- --push <name>` sends a release there, and `./chat up` downloads it.
+
+`npm run test:servers` proves all of it on one computer. Each company's server is a container running a Docker of its own, at its own address. Around them are a name server, a registry and Pebble, the test server Let's Encrypt publishes. The two servers share nothing but that network. The check launches a company on each, connects them, switches one off and on, and then destroys one and restores it on an empty server from its backup: 59 checks in about six minutes.
+
+What it does not do yet: run on two real servers, which is the one thing left of this step. Removing a person. Adding a company to a workspace, or leaving one. And the images are not on a public registry, so today a company builds them or gets them from a registry of yours.
 
 ## How it is built
 
 ```
-network.json          the companies, people and workspaces
+chaincode/chat/       the chat's rules, in Go. The same for the sandbox and for a company's own server
+server/               the app server: Fabric Gateway client, block decoder, HTTP API, sign-in
+web/                  the pages: React
+docs/                 the figures on this page, and the guide to many companies
+
+The sandbox
+network.json          the three companies, their people and their workspaces
 network/              turns network.json into a running Fabric network
   generate.mjs        writes the certificate, channel and Docker Compose files into .generated/
   net.mjs             up, down, status, stop, start: it only calls Docker
   scripts/            what runs inside the containers: channels, chaincode, enrolment
-chaincode/chat/       the chat's rules, in Go
-server/               the app server: Fabric Gateway client, block decoder, HTTP API
-web/                  the pages: React
-docs/                 the figures on this page
+
+A company's own server
+node-template/        what a company copies: company.json, the chat command, compose.yaml
+ctl/                  the admin tool its server runs: certificates, first blocks, the rules, and the agent that
+                      shares a workspace with another company when the app asks
+companies/            companies started on this machine, each in a folder of its own. Git ignores it
+Dockerfile            the image of the app
+scripts/              images.mjs builds the three images; company-check.mjs and companies-check.mjs test
+                      one company, and three sharing workspaces, end to end
 ```
 
 ### The chaincode
@@ -138,7 +238,7 @@ One contract, `chat`, in [chaincode/chat](chaincode/chat). Every function that w
 
 | Function | What it does |
 | --- | --- |
-| `Join`, `Directory`, `Whoami` | The workspace's directory of people. An ID such as `alice@AsterMSP` is read from the caller's certificate, never from an argument. |
+| `Join`, `Directory`, `Whoami` | The workspace's directory of people. An ID such as `alice@AsterMSP`, or `alice@aster.example` on a company's own server, is read from the caller's certificate, never from an argument. |
 | `CreateConversation`, `AddMembers`, `Overview` | Channels and direct messages. Everyone in a conversation must work at a company that keeps its scope. |
 | `Post`, `Messages`, `Edit`, `Delete`, `React` | Messages. Only the author may edit or delete. Delete blanks a public message and purges a private one. |
 | `History` | Every version a public message has had. |
@@ -151,6 +251,8 @@ Records are kept under readable keys: `profile~alice@AsterMSP`, `conv~general`, 
 [server/fabric.ts](server/fabric.ts) talks to Fabric through the Gateway service each 2.5 peer runs. A read asks the person's own company's peer. A write goes through `endorse`, `submit` and `getStatus`, and the time each took is shown under the message.
 
 [server/ledger.ts](server/ledger.ts) follows each peer's blocks from block 0, and [server/decode.ts](server/decode.ts) unpacks them: the signer, the endorsers, the reads and writes, the validation result. The ledger panel is drawn from that, and so is the live update of the chat.
+
+On a company's own server the same code runs with five more files. [server/company.ts](server/company.ts) is sign-in, invitations and what an administrator can do. [server/accounts.ts](server/accounts.ts) keeps accounts and sessions: passwords as scrypt hashes, and links and cookies as hashes too. [server/wallet.ts](server/wallet.ts) locks each person's key with AES-256-GCM. [server/ca.ts](server/ca.ts) asks the company's certificate authority for a new person's certificate. [server/desk.ts](server/desk.ts) passes an administrator's request to share a workspace on to the node's agent, which holds the key that takes. Which way the app runs is decided once, in [server/config.ts](server/config.ts).
 
 ## From the test-network tutorial to this network
 
@@ -194,7 +296,9 @@ Much of what is written about Fabric describes version 1.4. These are the places
 8. **Private IDs must not be guessable.** A private conversation's key is hashed on the shared ledger. If the key were built from its members' names, an outsider could test every pair. Private IDs come from the transaction ID.
 9. **Orderers that start at different times need their own port.** When one company's orderer joins a new channel before the other's, its first link to the other is made without a certificate, and Fabric keeps using that link, so no leader is ever elected. In this demo every orderer starts together and it never shows. With `ports.cluster` set in `network.json`, orderers talk to each other on a second port that refuses a link without a certificate, and they simply try again until it works.
 
-## The limits of this demo
+## The limits of the sandbox
+
+A company's own server removes the first three of these for one company. Its own limits are listed in [the template's README](node-template/README.md).
 
 - **One app server plays all three companies** and holds every person's private key. In a real deployment each company runs its own, and keys live in an HSM or on the person's device. "Who holds this message" works only because this one server can ask each company's peer as that company.
 - **There are no passwords.** Choosing a person is the sign-in. The certificate behind it is real.

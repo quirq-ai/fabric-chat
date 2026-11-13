@@ -1,0 +1,14 @@
+# The app image is built from package.json, server/ and web/. Nothing else goes to Docker.
+.git
+.generated
+.data
+node_modules
+dist
+build
+docs
+chaincode
+ctl
+network
+node-template
+scripts
+*.md

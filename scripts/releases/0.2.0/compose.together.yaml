@@ -1,0 +1,27 @@
+# Used only when company.json names a "dockerNetwork": several companies on one machine.
+#
+# On the internet each company's peer and orderer are reached by their own names. On one machine
+# there is no such thing, so the companies' nodes all join one extra Docker network, where each is
+# known by the name its company.json gives it. Nothing else joins it: every company's certificate
+# authority, database, chat app and keys stay on its own private network.
+#
+# A company on a server of its own leaves "dockerNetwork" out, and this file is not read.
+services:
+  peer:
+    networks:
+      together:
+        aliases: ["${PEER_HOST}"]
+  orderer:
+    networks:
+      together:
+        aliases: ["${ORDERER_HOST}"]
+  # The agent asks the other companies' peers to endorse the rules of a shared workspace.
+  agent:
+    networks:
+      default: {}
+      together: {}
+
+networks:
+  together:
+    name: ${DOCKER_NETWORK}
+    external: true
