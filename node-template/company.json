@@ -16,6 +16,6 @@
     "address": "127.0.0.1",
     "port": 8080
   },
-  "images": "fabric-chat",
+  "images": "ghcr.io/quirq-ai/fabric-chat",
   "release": "0.3.0"
 }

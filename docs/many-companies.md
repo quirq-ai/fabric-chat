@@ -25,7 +25,7 @@ In Fabric's own words: a company is an organisation, a workspace is a channel, a
 
 ## What was tested for this guide
 
-Each line below was run on 12 or 13 November 2026. The first five were run in a throwaway copy of the project, with the scripts in [lab/](lab/). The next six test step 1 as it is built, the nine after them step 2, and the last ten step 3. Step 3 was tested on a stand-in for the internet, described under the table.
+Each line below was run on 12 or 13 November 2026. The first five were run in a throwaway copy of the project, with the scripts in [lab/](lab/). The next six test step 1 as it is built, the nine after them step 2, and the last eleven step 3. Step 3 was tested on a stand-in for the internet, described under the table, apart from one line that ran on GitHub's own machine.
 
 | Claim | What was run | Result |
 | --- | --- | --- |
@@ -50,6 +50,7 @@ Each line below was run on 12 or 13 November 2026. The first five were run in a 
 | It says so plainly when too few are left | A second orderer stopped, leaving one of three | One message had already been taken by the last orderer and was never confirmed. The app said that after 30 seconds, and that it might still be written. The next was refused at once. When the orderers returned, a message went through 12 seconds later without being sent again |
 | Sharing a workspace by clicking | Two administrators in Edge: copy a card, start a workspace, accept the invitation, talk. 29 checks | All passed. The new workspace appeared for both without reloading the page |
 | A release can be published and downloaded | `npm run images -- --push` sent the three images to a registry. Each server held only Docker, the template's two files and a `company.json` | `./chat up` downloaded the images and launched the company in 34 to 39 seconds |
+| The published images are the tested ones | GitHub's own machine, a clean Ubuntu server, built release 0.3.0's images, ran the one-company check on them, and started a company with `./chat up` from the template as it comes. Only then did it publish them | 86 checks passed there and the launch took 25 seconds. The three images are public: anyone downloads them with no account |
 | The chat gets its own HTTPS certificate | Each server asked a certificate authority for one. The authority was Pebble, the test server Let's Encrypt publishes, and it checked each name by calling the server on port 80 or 443 | Issued for both companies. Plain HTTP was sent on to HTTPS, and the sign-in cookie was marked for HTTPS only |
 | Only what should be open is open | A machine that belongs to neither company tried the ports of each server | Open: 443, 80, 7051, 7050 and 7055. Closed: the app itself, the certificate authority, the database, and the orderer's admin and status ports |
 | A server says truthfully whether it reaches another | Aster's node tried Dune's from a pasted card: as it was, with Dune's orderer stopped, and from a forged card giving Dune's addresses under another root certificate | All three addresses reached and proven. With the orderer stopped, its two addresses were named as silent. With the forged card: something answers, but it is not that company's node |
@@ -64,9 +65,8 @@ Each line below was run on 12 or 13 November 2026. The first five were run in a 
 
 Not run yet:
 
-- Two real servers on different networks. Everything above ran on one computer. Step 3's servers were separate Dockers with separate addresses, which is as near as one computer gets.
+- Two real servers on different networks. Everything above ran on one computer, except the one-company check and one `./chat up`, which GitHub's machine runs before it publishes a release. Step 3's servers were separate Dockers with separate addresses, which is as near as one computer gets.
 - Let's Encrypt itself. The certificates came from its test server, by the same protocol. The real one needs a public name.
-- A registry on the internet. The images were sent to, and downloaded from, a registry on the same computer.
 - A restore in a workspace of three while the other two carry on writing.
 - Adding a company to a shared workspace that already exists. Removing a person.
 
@@ -103,7 +103,7 @@ The template is the [node-template](../node-template) folder of this repository:
 
 As the template comes, the chat answers over plain HTTP on the machine itself and the node is closed to every other server. That is right for a first look. The next section opens it up.
 
-One limit today. `./chat up` downloads the three images from the registry named in `company.json`, but they are not on a public registry yet. Build them from this repository with `npm run images`, and send them to a registry with `npm run images -- --push <name>`.
+`./chat up` downloads the three images from GitHub's container registry, where they are public, so a server needs nothing but Docker. To run your own build instead, run `npm run images` in this repository and put `fabric-chat` in `images`.
 
 ## Add people
 
@@ -205,7 +205,7 @@ Four traps were found on the way. All four are fixed.
 | Links between orderers | The same port as everything else | A second port that insists on certificates | Done |
 | App server | Plays all three companies, with no sign-in, and holds everyone's keys in plain files | One company. Real sign-in. Keys locked on disk. An administrator role | Done, with passwords. Single sign-on is later |
 | "Who holds this message" | Asks every company's peer | Asks your own peer. For the other companies it says what Fabric's rules make true, and that their peers were not asked | Done |
-| The chat's rules | Built on the spot by `net:up` | A released image. The same version at every company in a workspace | Done. `npm run images -- --push` sends a release to a registry, and `./chat up` downloads it. Not on a public registry yet |
+| The chat's rules | Built on the spot by `net:up` | A released image. The same version at every company in a workspace | Done. Release 0.3.0 is public on GitHub's container registry, and `./chat up` downloads it |
 | How people reach the chat | A port of the laptop, over plain HTTP | HTTPS, through a proxy that gets and renews its own certificate | Done. Tested with Let's Encrypt's test server, not with Let's Encrypt itself |
 | How nodes reach each other | One Docker network on one machine | By name, through three ports the company opens | Done, on a stand-in for two servers |
 | Backups | None. `net:down` removes everything | One locked file, and a restore on an empty server | Done. Mending a message that was edited after the backup needs a change to the chat's rules: step 4 |
@@ -223,8 +223,8 @@ Two, in the end. Add a third only if you need it.
 
 | Repository | What is in it | Who uses it | Today |
 | --- | --- | --- | --- |
-| `fabric-chat` | The chat's rules, the app, the admin tool, the sandbox and the documents | You, and anyone who wants to read or change the code | Exists, public, under `quirq-ai`. Its images are built and sent to a registry by hand, with `npm run images -- --push` |
-| `fabric-chat-node` | A template: `compose.yaml`, `company.json`, the `chat` command and the runbook | Every company. Each makes its own private copy from it | Exists, public, under `quirq-ai`, as a template repository: **Use this template** makes a company's own copy. It is a copy of the `node-template` folder of `fabric-chat`, which stays the source because the tests launch from it: copy the folder across at each release. A company cannot launch from its copy until the images are on a registry it can reach |
+| `fabric-chat` | The chat's rules, the app, the admin tool, the sandbox and the documents | You, and anyone who wants to read or change the code | Exists, public, under `quirq-ai`. Its **Publish the images** workflow builds the three images, starts a company with them as a check, and publishes them to GitHub's container registry |
+| `fabric-chat-node` | A template: `compose.yaml`, `company.json`, the `chat` command and the runbook | Every company. Each makes its own private copy from it | Exists, public, under `quirq-ai`, as a template repository: **Use this template** makes a company's own copy. It is a copy of the `node-template` folder of `fabric-chat`, which stays the source because the tests launch from it: copy the folder across at each release. A company launches from its copy as it comes, because the images are public |
 | `fabric-chat-directory`, later and only if needed | A public list of company cards | Companies looking for one another | Not needed yet |
 
 Where the folders are today:
@@ -238,7 +238,7 @@ Where the folders are today:
 | `fabric-chat-node` | `node-template`, copied to the `fabric-chat-node` repository at each release |
 | The `connect` commands of `ctl` | `ctl/workspaces.sh` and `ctl/agent.sh`. `docs/lab` keeps the first experiment |
 
-- **How a release will reach a server.** A version tag on `fabric-chat` makes GitHub Actions run the tests, build the three images, publish them to GitHub's container registry and copy the template to `fabric-chat-node`. A company replaces its `chat` and `compose.yaml` with that version's, changes `release` in its `company.json`, and runs `./chat up` again. Its server only ever downloads images. The download and the move to a new release are built and tested. The GitHub Actions and the public registry are not set up yet: today the images are sent, and the template copied, by hand.
+- **How a release reaches a server.** A version tag on `fabric-chat`, or a click in its Actions tab, makes GitHub check the code, build the three images, and start a company with them: once step by step with the one-company check, and once with `./chat up` from the template as it comes. Only then does it publish them to GitHub's container registry. A company replaces its `chat` and `compose.yaml` with that version's, changes `release` in its `company.json`, and runs `./chat up` again. Its server only ever downloads images. The template is still copied to `fabric-chat-node` by hand.
 - **Why not one repository.** A company should not have to read or build source code to run its node. Its copy of the template holds only its settings, so it stays small and rarely changes.
 - **Why not more.** The rules, the app and the tool still change together, and one repository lets one change cover all three. Split the rules into their own repository on the day another company wants to review rule changes on its own.
 - **What never goes into any repository.** Private keys, passwords, and the `.env` file `./chat up` writes. On a company's server none of the first two is ever written into the folder at all: they stay in Docker volumes.
@@ -249,13 +249,13 @@ Where the folders are today:
 | --- | --- | --- | --- |
 | 1. One company, properly | `company.json`, `chat up`, the app for one company with real sign-in, the home workspace | A new company on a clean machine is chatting among its own people within ten minutes | Built. From an empty folder to the first administrator's link took 24 to 26 seconds, on the machine the images were built on. Not yet tried on a second machine |
 | 2. Connect two | Cards, invite and accept as buttons in the app. Three companies that were each set up separately share workspaces | The lab's result, reached by clicking rather than by script | Built, on one machine. `npm run test:companies` launches three separate companies and connects them. The teaching sandbox is still the older three-in-one network |
-| 3. Two real servers | Published images, the node's ports opened, real names, HTTPS, firewall rules, backups | Two companies on different networks exchange messages over the internet | Built, and proven on a stand-in: two Dockers with their own addresses on one computer, 59 checks in `npm run test:servers`. The last step is yours to give: two real servers, three names for each, and a registry both can reach |
+| 3. Two real servers | Published images, the node's ports opened, real names, HTTPS, firewall rules, backups | Two companies on different networks exchange messages over the internet | Built, and proven on a stand-in: two Dockers with their own addresses on one computer, 59 checks in `npm run test:servers`. The images are public on GitHub's registry. The last step is yours to give: two real servers, and three names for each |
 | 4. Living with it | Removing a person, moving every company to a new version of the rules, adding a company to an existing workspace | Each has been done once, start to finish, in the sandbox | |
 | 5. Hardening | Keys in a hardware module or on people's devices, the certificate authority's key offline, monitoring | Someone outside the team has reviewed it | |
 
 ## Decisions
 
-Steps 1 to 3 took the recommended answer to six of these. Three are still open.
+Seven of these are decided. Two are still open in part: the name, and who may reach a node's ports.
 
 1. **Company IDs: a domain name the company owns.** Decided, and built.
 2. **How people sign in: passwords for now.** Each person chooses their own from a one-time link. The company's existing single sign-on can come later.
@@ -264,5 +264,5 @@ Steps 1 to 3 took the recommended answer to six of these. Three are still open.
 5. **Who can join a shared workspace: the companies named when it is started, and no changes afterwards.** Decided, and built. Adding or removing a company later is step 4.
 6. **HTTPS: a proxy on the same server that gets its certificate from Let's Encrypt.** Decided, and built. One line in `company.json` and no certificate to buy or renew by hand.
 7. **Backups: one file, locked with a passphrase, made by hand or on a schedule.** Decided, and built. Sending it off the server is left to the company.
-8. **Where the images are published.** Still open. GitHub's container registry under `quirq-ai` is the obvious place. Public images let any company download them without an account. Private ones need each company to sign in.
+8. **Where the images are published: GitHub's container registry under `quirq-ai`, public.** Decided, and done for release 0.3.0. Any company downloads them without an account. They are built for Intel and AMD processors only.
 9. **Who may reach a node's ports: anyone, or only known partners.** Still open. Today they are open to anyone and guarded by certificates and signatures, as Fabric intends. A company that wants more limits them at its provider's firewall, to the addresses of the companies it shares a workspace with.

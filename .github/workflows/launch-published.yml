@@ -1,0 +1,35 @@
+# Does what a new company does, on a clean machine that is signed in to no registry: takes the
+# public template as it comes and runs ./chat up, which downloads the published images.
+#
+# Run it by hand from the Actions tab after a release is published and the template is copied to
+# quirq-ai/fabric-chat-node. It has no rights at all on this repository or its packages, so a
+# pass means anyone on the internet can do the same.
+name: Launch from the published images
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Take the public template, with no sign-in
+        run: git clone --depth 1 https://github.com/quirq-ai/fabric-chat-node.git company
+
+      - name: ./chat up, as the template comes
+        working-directory: company
+        run: |
+          echo "This machine is signed in to these registries: $(jq -r '.auths // {} | keys | join(", ")' ~/.docker/config.json 2>/dev/null || true)(none)"
+          grep -E '"(images|release)"' company.json
+          started=$(date +%s)
+          ./chat up
+          echo "From nothing to a running company took $(( $(date +%s) - started )) seconds, download included."
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/health
+          echo
+          echo "Images its containers run:"
+          docker ps --format '{{.Image}}' | sort -u
+          ./chat status
+          ./chat wipe aster.example

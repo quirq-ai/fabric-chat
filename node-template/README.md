@@ -2,7 +2,7 @@
 
 This folder is everything one company needs to run its own team chat on its own Hyperledger Fabric node, and to share a workspace with other companies that do the same: three files, and Docker.
 
-**Status on 13 November 2026: the images are not published yet.** These files belong to release 0.3.0 of [Fabric Chat](https://github.com/quirq-ai/fabric-chat). Its three images are not on a public registry, so `./chat up` cannot download them. Until they are, build them on the server itself: clone that repository and run `npm run images` there, which needs Node and Docker.
+These files belong to release 0.3.0 of [Fabric Chat](https://github.com/quirq-ai/fabric-chat). Its three images are public on GitHub's container registry, and `./chat up` downloads them: there is nothing to build and no account to make.
 
 | File | What it is |
 | --- | --- |
@@ -19,7 +19,7 @@ These files are also published by themselves, as the template repository [fabric
 ## Before you start
 
 - **A machine with Docker** and Docker Compose version 2. One company's whole server used 300 MB of memory when idle in testing. 2 CPUs, 4 GB of memory and 40 GB of disk is plenty to start.
-- **The three images** of the release you want to run. `images` in `company.json` says where they come from, and `./chat up` downloads them. They are not on a public registry yet: build them in the `fabric-chat` repository with `npm run images`, and send them to a registry of your own with `npm run images -- --push <name>`.
+- **The three images** of the release you want to run. `images` in `company.json` says where they come from, and `./chat up` downloads them: about 400 MB the first time. As the template comes, that is GitHub's container registry, where they are public. They are built for servers with Intel or AMD processors, not yet for ARM ones. To run your own build instead, run `npm run images` in the `fabric-chat` repository and put `fabric-chat` in `images`.
 - **On Windows**, run the commands in Git Bash, as `sh chat up`.
 
 ## 1. Fill in company.json

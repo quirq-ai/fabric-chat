@@ -129,13 +129,7 @@ The sandbox runs every company on one machine and asks for no passwords. The pla
 
 ![The sign-in page of a company's own server](docs/screens/company-sign-in.png)
 
-Build the three images once:
-
-```bash
-npm run images
-```
-
-Then start a company from the template folder. `./chat` needs only Docker. On Windows run it in Git Bash, as `sh chat up`.
+Start a company from the template folder. `./chat` needs only Docker: it downloads the release's three images from GitHub's container registry, where they are public. On Windows run it in Git Bash, as `sh chat up`.
 
 ```bash
 cd node-template
@@ -144,6 +138,8 @@ cd node-template
 ```bash
 ./chat up
 ```
+
+To run your own build of the images instead, run `npm run images` and put `"images": "fabric-chat"` in `company.json`.
 
 The first start takes about 25 seconds. It makes the company's root key on that machine, has the company's own certificate authority issue a certificate to each node, creates a home workspace that only this company is on, and prints a one-time link for the first administrator. She opens it, chooses a password, and adds everyone else from the People button. Each person gets a link of their own and chooses their own password.
 
@@ -201,11 +197,11 @@ Two lines in `company.json` put a company on the internet, once its three names 
 - **The node opens three ports** for other companies' servers: 7051, 7050 and 7055. Nothing else is opened, and `./chat status` says what is.
 - **The app says whether it can reach another company's node** as soon as an administrator pastes that company's card, and whether what answers there really is that company's.
 - **`./chat backup`** puts everything a company has into one file, locked with a passphrase. **`./chat restore`** brings the company back on an empty server.
-- **The images come from a registry.** `npm run images -- --push <name>` sends a release there, and `./chat up` downloads it.
+- **The images come from a registry.** A workflow publishes each release to GitHub's container registry, after it has started a company with them, and `./chat up` downloads it.
 
 `npm run test:servers` proves all of it on one computer. Each company's server is a container running a Docker of its own, at its own address. Around them are a name server, a registry and Pebble, the test server Let's Encrypt publishes. The two servers share nothing but that network. The check launches a company on each, connects them, switches one off and on, and then destroys one and restores it on an empty server from its backup: 59 checks in about six minutes.
 
-What it does not do yet: run on two real servers, which is the one thing left of this step. Removing a person. Adding a company to a workspace, or leaving one. And the images are not on a public registry, so today a company builds them or gets them from a registry of yours.
+What it does not do yet: run on two real servers, which is the one thing left of this step. Removing a person. Adding a company to a workspace, or leaving one.
 
 ## How it is built
 
